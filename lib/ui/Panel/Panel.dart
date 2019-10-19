@@ -4,16 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
-import '../../component/PockWidget.dart';
-
-import '../../plugin/MediaPlayer.dart';
 
 import '../../component/AntiBlockingWidget.dart';
 import '../../component/CustomCupertinoPageRoute.dart';
 import '../../component/CustomPageView.dart';
 import '../../component/CustomValueNotifier.dart';
+import '../../component/PockWidget.dart';
 import '../../data/Constants.dart';
 import '../../data/Variable.dart';
+import '../../plugin/MediaPlayer.dart';
 
 const double _kImageWidth = 300;
 const double _kImageHeight = 300;
@@ -164,41 +163,6 @@ void onRepeat() {
   Variable.playListSequence.nextState();
 }
 
-void onSkipPrevious() {
-  final list = Variable.currentList;
-  final item = Variable.currentItem;
-  if (list.value == null || list.value.length == 0 || item.value == null) {
-    return;
-  }
-  assert(list.value.contains(item.value));
-  int index = list.value.indexOf(item.value) - 1;
-  if (index < 0) {
-    index = list.value.length - 1;
-  }
-  item.value = list.value[index];
-}
-
-void onPlay() {
-  MediaPlayer.status == MediaPlayerStatus.started
-      ? MediaPlayer.pause()
-      : MediaPlayer.start();
-}
-
-void onSkipNext() {
-  final list = Variable.currentList;
-  final item = Variable.currentItem;
-  if (list.value == null ||
-      list.value.length == 0 ||
-      item.value == null ||
-      !list.value.contains(item.value)) {
-    return;
-  }
-  int index = list.value.indexOf(item.value) + 1;
-  if (index >= list.value.length) {
-    index = 0;
-  }
-  item.value = list.value[index];
-}
 
 class MiniPanel extends StatelessWidget {
   const MiniPanel({Key key}) : super(key: key);
@@ -878,9 +842,10 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
       });
 
   void _loadImageAsync() async {
+    await Future.delayed(const Duration(milliseconds: 150));
     await Future.wait([
       Variable.getArtworkAsync(path: songInfo?.filePath),
-      Future.delayed(const Duration(milliseconds: 200)),
+      Future.delayed(const Duration(milliseconds: 50)),
     ]);
     await SchedulerBinding.instance.endOfFrame;
     ImageSwitcherWidget.imageNotifier.value = songInfo == null
@@ -1525,13 +1490,14 @@ class SkipPreviousButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
+
     return const Material(
       elevation: 0.0,
       color: Colors.transparent,
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: const InkWell(
-        onTap: onSkipPrevious,
+        onTap: MediaPlayer.onSkipPrevious,
         child: const Padding(
           padding: const EdgeInsets.all(20),
           child: const SizedBox.expand(
@@ -1558,7 +1524,7 @@ class PreviousButton extends StatelessWidget {
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: const InkWell(
-        onTap: onSkipPrevious,
+        onTap: MediaPlayer.onSkipPrevious,
         child: const Padding(
           padding: const EdgeInsets.all(20),
           child: const SizedBox.expand(
@@ -1585,7 +1551,7 @@ class HeroPlayButton extends StatelessWidget {
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: const InkWell(
-        onTap: onPlay,
+        onTap: MediaPlayer.onPlay,
         child: const Padding(
           padding: const EdgeInsets.all(20),
           child: const SizedBox.expand(
@@ -1612,7 +1578,7 @@ class PlayButton extends StatelessWidget {
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: const InkWell(
-        onTap: onPlay,
+        onTap: MediaPlayer.onPlay,
         child: const Padding(
           padding: const EdgeInsets.all(20),
           child: const SizedBox.expand(
@@ -1651,7 +1617,7 @@ class SkipNextButton extends StatelessWidget {
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: const InkWell(
-        onTap: onSkipNext,
+        onTap: MediaPlayer.onSkipNext,
         child: const Padding(
           padding: const EdgeInsets.all(20),
           child: const SizedBox.expand(
@@ -1678,7 +1644,7 @@ class NextButton extends StatelessWidget {
       shape: const CircleBorder(),
       clipBehavior: Clip.hardEdge,
       child: const InkWell(
-        onTap: onSkipNext,
+        onTap: MediaPlayer.onSkipNext,
         child: const Padding(
           padding: const EdgeInsets.all(20),
           child: const SizedBox.expand(

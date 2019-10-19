@@ -7,13 +7,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
-import '../../component/AnimatedPopUpWidget.dart';
-import '../../plugin/AndroidPlugin.dart';
-import '../../plugin/MediaPlayer.dart';
 
+import '../../component/AnimatedPopUpWidget.dart';
 import '../../component/CustomReorderableList.dart';
 import '../../data/Constants.dart';
 import '../../data/Variable.dart';
+import '../../plugin/MediaPlayer.dart';
 import 'AlbumViewItem.dart';
 import 'ArtistViewItem.dart';
 import 'SongTIleArtwork.dart';
@@ -166,6 +165,38 @@ class _PlayListState extends State<PlayList>
       Variable.filePathToSongMap[songInfo.filePath] = songInfo;
     });
     MediaPlayer.volume = 0.5;
+    MediaPlayer.onPrevious = () {
+      debugPrint('onPrevious');
+      final list = Variable.currentList;
+      final item = Variable.currentItem;
+      if (list.value == null ||
+          list.value.length <= 1 ||
+          item.value == null ||
+          !list.value.contains(item.value)) {
+        debugPrint('onPrevious failed');
+        return;
+      }
+      int index = list.value.indexOf(item.value) - 1;
+      if (index < 0) {
+        index = list.value.length - 1;
+      }
+      item.value = list.value[index];
+    };
+    MediaPlayer.onNext = () {
+      final list = Variable.currentList;
+      final item = Variable.currentItem;
+      if (list.value == null ||
+          list.value.length <= 1 ||
+          item.value == null ||
+          !list.value.contains(item.value)) {
+        return;
+      }
+      int index = list.value.indexOf(item.value) + 1;
+      if (index >= list.value.length) {
+        index = 0;
+      }
+      item.value = list.value[index];
+    };
     await Future.delayed(const Duration(milliseconds: 100));
     Variable.panelAntiBlock.value = false;
   }
@@ -244,7 +275,6 @@ class _PlayListState extends State<PlayList>
   }
 
   void _test(BuildContext context) {
-    AndroidPlugin.AndroidCHANNEL.invokeMethod('notification');
     Variable.innerScrollController?.animateTo(
         Variable.innerScrollController.position.maxScrollExtent,
         duration: Constants.defaultDuration,

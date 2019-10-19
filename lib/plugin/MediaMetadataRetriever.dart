@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 const MethodChannel MediaMetadataRetrieverCHANNEL =
-    MethodChannel('MediaMetadataRetriever');
+    MethodChannel('MMR');
 
 // raw api async
 // return ImageProvider

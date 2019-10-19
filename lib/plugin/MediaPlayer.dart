@@ -17,16 +17,21 @@ enum MediaPlayerStatus {
 }
 
 class MediaPlayer {
-  static final mediaPlayerCHANNEL =
-      const MethodChannel('flutter.io/MediaPlayer')
-        ..setMethodCallHandler(methodCallHandler);
+  static final mediaPlayerCHANNEL = const MethodChannel('MP')
+    ..setMethodCallHandler(methodCallHandler);
 
   // Java invokeMethod
   static Future<dynamic> methodCallHandler(MethodCall methodCall) async {
     switch (methodCall.method) {
       case 'Dart':
-        String text = 'Dart is available. ';
-        debugPrint(text);
+        debugPrint('Dart is available. ');
+        return null;
+
+      case 'onPrevious':
+        onPrevious();
+        return null;
+      case 'onNext':
+        onNext();
         return null;
 
       case 'stateManager':
@@ -88,6 +93,15 @@ class MediaPlayer {
     }
   }
 
+  static onPlay() => status == MediaPlayerStatus.started
+      ? MediaPlayer.pause()
+      : MediaPlayer.start();
+
+  static onSkipPrevious()=>onPrevious();
+  static onSkipNext()=>onNext();
+  static void Function() onPrevious = () {};
+  static void Function() onNext = () {};
+
   static final ValueNotifier<int> currentDurationNotifier =
       ValueNotifier<int>(1);
 
@@ -109,7 +123,7 @@ class MediaPlayer {
   static Function(MediaPlayerStatus state, MediaPlayerStatus preState)
       onStateChangeListener = // Default CallBack
       (MediaPlayerStatus state, MediaPlayerStatus preState) =>
-          debugPrint(state.toString());
+          debugPrint('MediaPlayerStatus' + state.toString());
 
   static MediaPlayerStatus status = MediaPlayerStatus.idle;
 
@@ -194,7 +208,7 @@ class MediaPlayer {
     mediaPlayerCHANNEL
         .invokeMethod('setDataSource', {'path': path}).catchError((error) {
       _stateUpdate(MediaPlayerStatus.error);
-      debugPrint('onSetMedia');
+      debugPrint('onSetDataSource');
       debugPrint(error.toString());
     });
   }
