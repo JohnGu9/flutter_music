@@ -150,21 +150,6 @@ class _PlayListState extends State<PlayList>
       await Future.delayed(const Duration(milliseconds: 300));
     }
     await Variable.mediaPlayerLoading;
-
-    // Start Load PlayList
-    final defaultListNotifier = Variable.defaultList;
-    final favoriteListNotifier = Variable.favouriteList;
-    if (defaultListNotifier.value != null ||
-        favoriteListNotifier.value != null) {
-      return;
-    }
-    final audioQuery = Variable.audioQuery;
-    defaultListNotifier.value = await audioQuery.getSongs();
-    favoriteListNotifier.value = List();
-    defaultListNotifier.value.forEach((SongInfo songInfo) {
-      Variable.filePathToSongMap[songInfo.filePath] = songInfo;
-    });
-    MediaPlayer.volume = 0.5;
     MediaPlayer.onPrevious = () {
       debugPrint('onPrevious');
       final list = Variable.currentList;
@@ -197,6 +182,27 @@ class _PlayListState extends State<PlayList>
       }
       item.value = list.value[index];
     };
+    MediaPlayer.getSongInfo = () => [
+          Variable.currentItem.value.title,
+          Variable.currentItem.value.artist,
+          Variable.currentItem.value.album
+        ];
+
+    // Start Load PlayList
+    final defaultListNotifier = Variable.defaultList;
+    final favoriteListNotifier = Variable.favouriteList;
+    if (defaultListNotifier.value != null ||
+        favoriteListNotifier.value != null) {
+      return;
+    }
+    final audioQuery = Variable.audioQuery;
+    defaultListNotifier.value = await audioQuery.getSongs();
+    favoriteListNotifier.value = List();
+    defaultListNotifier.value.forEach((SongInfo songInfo) {
+      Variable.filePathToSongMap[songInfo.filePath] = songInfo;
+    });
+    MediaPlayer.volume = 0.5;
+
     await Future.delayed(const Duration(milliseconds: 100));
     Variable.panelAntiBlock.value = false;
   }

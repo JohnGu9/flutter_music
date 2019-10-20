@@ -27,6 +27,9 @@ dependencies:
   after_layout:
   auto_size_text:
   share_extend:
+  palette_generator:
+  sqflite:
+  path:
 
 dev_dependencies:
   flutter_test:

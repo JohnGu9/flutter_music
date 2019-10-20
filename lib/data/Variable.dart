@@ -1,28 +1,47 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
-import '../component/CustomValueNotifier.dart';
-import '../plugin/MediaMetadataRetriever.dart';
+import 'package:palette_generator/palette_generator.dart';
 import 'package:share_extend/share_extend.dart';
 
+import '../component/CustomValueNotifier.dart';
+import '../plugin/MediaMetadataRetriever.dart';
 import 'Constants.dart';
 
 class Variable {
   // Controller
   static final audioQuery = FlutterAudioQuery();
 
+//  static final database = _dbInit();
+//
+//  static Future<Database> _dbInit() async => openDatabase(
+//        // Set the path to the database.
+//        join(await getDatabasesPath(), 'johngu.db'),
+//        // When the database is first created, create a table to store dogs.
+//        onCreate: (db, version) {
+//          // Run the CREATE TABLE statement on the database.
+//          return db.execute(
+//            "CREATE TABLE library(id INTEGER PRIMARY KEY, filePath TEXT)",
+//          );
+//        },
+//        // Set the version. This executes the onCreate function and provides a
+//        // path to perform database upgrades and downgrades.
+//        version: 1,
+//      );
+
   // Data
   static final CustomValueNotifier<List> currentList =
-      CustomValueNotifier(null);
+  CustomValueNotifier(null);
   static final CustomValueNotifier<SongInfo> currentItem =
-      CustomValueNotifier(null);
+  CustomValueNotifier(null);
 
   static final CustomValueNotifier<List<SongInfo>> defaultList =
-      CustomValueNotifier(null);
+  CustomValueNotifier(null);
   static final CustomValueNotifier<List<SongInfo>> favouriteList =
-      CustomValueNotifier(null);
+  CustomValueNotifier(null);
 
   // copy from AntiBlockingWidget
   static const AntiBlockDuration = const Duration(milliseconds: 400);
@@ -49,7 +68,7 @@ class Variable {
 //      currentAbstractList = CustomValueNotifier(null);
 
   static final Map<String, Future<ImageProvider>> futureImages =
-      Map<String, Future<ImageProvider>>(); // Get image async
+  Map<String, Future<ImageProvider>>(); // Get image async
   static final Map<String, ImageProvider> filePathToImageMap = Map<String,
       ImageProvider>(); // Get data sync, but if data isn't ready, it will return null.
 
@@ -59,10 +78,17 @@ class Variable {
       return null;
     }
     // If image has no cache yet, instance a future to cache the image data
-    if (!Variable.futureImages.containsKey(path)) {
-      Variable.futureImages[path] = getArtworkFromAudioFile(path)
+    if (!futureImages.containsKey(path)) {
+      futureImages[path] = Future<ImageProvider>(() async {
+        Future<ImageProvider> res = getArtworkFromAudioFile(path);
         // cache image data
-        ..then((image) => Variable.filePathToImageMap[path] = image);
+        filePathToImageMap[path] = await res;
+        filePathToPaletteMap[path] =
+        filePathToImageMap[path] == null ? null : await PaletteGenerator
+            .fromImageProvider(filePathToImageMap[path]);
+//        debugPrint(filePathToPaletteMap[path].toString());
+        return res;
+      });
     }
     return Variable.futureImages[path];
   }
@@ -77,6 +103,7 @@ class Variable {
   static final artistIdToImagesMap = Map<String, List<ImageProvider>>();
   static List<AlbumInfo> albums;
   static List<ArtistInfo> artists;
+  static final filePathToPaletteMap = Map<String, PaletteGenerator>();
 
   static Future albumToSongsMapLoading;
 
@@ -97,7 +124,7 @@ class Variable {
     for (int i = 0; i < albums.length;) {
       final AlbumInfo albumInfo = albums[i];
       final List<SongInfo> songs =
-          await audioQuery.getSongsFromAlbum(album: albumInfo);
+      await audioQuery.getSongsFromAlbum(album: albumInfo);
       for (int i = 0; i < songs.length; i++) {
         songs[i] = filePathToSongMap[songs[i].filePath];
       }
@@ -134,7 +161,7 @@ class Variable {
       await SchedulerBinding.instance.endOfFrame;
       final ArtistInfo artistInfo = artists[i];
       final List<SongInfo> songs =
-          await audioQuery.getSongsFromArtist(artist: artistInfo);
+      await audioQuery.getSongsFromArtist(artist: artistInfo);
       for (int i = 0; i < songs.length; i++) {
         songs[i] = Variable.filePathToSongMap[songs[i].filePath];
       }
@@ -153,7 +180,7 @@ class Variable {
     for (final SongInfo songInfo in songs) {
       await SchedulerBinding.instance.endOfFrame;
       final ImageProvider image =
-          await Variable.getArtworkAsync(path: songInfo.filePath);
+      await Variable.getArtworkAsync(path: songInfo.filePath);
       if (image != null) {
         return image;
       }
@@ -168,7 +195,7 @@ class Variable {
     for (final SongInfo songInfo in songs) {
       await SchedulerBinding.instance.endOfFrame;
       final ImageProvider image =
-          await Variable.getArtworkAsync(path: songInfo.filePath);
+      await Variable.getArtworkAsync(path: songInfo.filePath);
       if (image != null) {
         list.add(image);
       }
@@ -191,7 +218,7 @@ class Variable {
   }
 
   static final CustomValueNotifier<bool> panelAntiBlock =
-      CustomValueNotifier<bool>(true);
+  CustomValueNotifier<bool>(true);
 
   static Future pageRouteTransition;
 

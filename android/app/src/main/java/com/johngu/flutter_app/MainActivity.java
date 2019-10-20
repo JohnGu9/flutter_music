@@ -24,41 +24,36 @@ public class MainActivity extends FlutterActivity {
     static MediaPlayerService.MediaPlayerServiceBinder mediaPlayerServiceBinder;
     static ServiceConnection mediaPlayerServiceConnection;
 
-
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         GeneratedPluginRegistrant.registerWith(this);
 
+
         Constants.mainThreadHandler = new Handler();
 
         Constants.AndroidMethodChannel = new MethodChannel(getFlutterView(), "Android");
         Constants.AndroidMethodChannel.setMethodCallHandler(
-                new MethodChannel.MethodCallHandler() {
+                (methodCall, result) -> {
+                    switch (methodCall.method) {
+                        case "Java":
+                        case "java":
+                            String text = "Java is available";
+                            Log.d(text + "\n", null);
+                            result.success(null);
+                            break;
 
-                    @TargetApi(Build.VERSION_CODES.M)
-                    @Override
-                    public void onMethodCall(MethodCall methodCall, MethodChannel.Result result) {
-                        switch (methodCall.method) {
-                            case "Java":
-                            case "java":
-                                String text = "Java is available";
-                                Log.d(text + "\n", null);
-                                result.success(null);
-                                break;
+                        case "moveTaskToBack":
+                            moveTaskToBack(true);
+                            result.success(null);
+                            break;
 
-                            case "moveTaskToBack":
-                                moveTaskToBack(true);
-                                result.success(null);
-                                break;
+                        case "notification":
+                            break;
 
-                            case "notification":
-                                break;
-
-                            default:
-                                result.notImplemented();
-                        }
+                        default:
+                            result.notImplemented();
                     }
                 });
 
@@ -67,7 +62,6 @@ public class MainActivity extends FlutterActivity {
                 new MethodChannel.MethodCallHandler() {
                     MediaMetadataRetriever mmr;
 
-                    @SuppressWarnings("NullableProblems")
                     @Override
                     public void onMethodCall(MethodCall methodCall, MethodChannel.Result result) {
                         switch (methodCall.method) {
@@ -87,120 +81,114 @@ public class MainActivity extends FlutterActivity {
         // setup MethodChannel
         Constants.MediaPlayerMethodChannel = new MethodChannel(getFlutterView(), "MP");
         Constants.MediaPlayerMethodChannel.setMethodCallHandler(
-                new MethodChannel.MethodCallHandler() {
+                (methodCall, result) -> {
+                    // Note: this method is invoked on the main thread.
+                    // TODO
+                    switch (methodCall.method) {
+                        case "Java":
+                        case "java":
+                            Log.d("Dart invoke method", "Java is available");
+                            result.success(null);
+                            break;
 
-                    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-                    @Override
-                    public void onMethodCall(MethodCall call, MethodChannel.Result result) {
-                        // Note: this method is invoked on the main thread.
-                        // TODO
-                        switch (call.method) {
-                            case "Java":
-                            case "java":
-                                Log.d("Dart invoke method", "Java is available");
-                                result.success(null);
-                                break;
+                        case "init":
+                            mediaPlayerServiceBinder.init();
+                            result.success(null);
+                            break;
+                        case "release":
+                            mediaPlayerServiceBinder.release();
+                            result.success(null);
+                            break;
 
-                            case "init":
-                                mediaPlayerServiceBinder.init();
-                                result.success(null);
-                                break;
-                            case "release":
-                                mediaPlayerServiceBinder.release();
-                                result.success(null);
-                                break;
+                        case "reset":
+                            mediaPlayerServiceBinder.reset();
+                            result.success(null);
+                            break;
 
-                            case "reset":
-                                mediaPlayerServiceBinder.reset();
-                                result.success(null);
-                                break;
+                        case "isAvailable":
+                            result.success(mediaPlayerServiceBinder.isBinderAlive());
+                            break;
 
-                            case "isAvailable":
-                                result.success(mediaPlayerServiceBinder.isBinderAlive());
-                                break;
+                        case "play":
+                        case "start":
+                            mediaPlayerServiceBinder.start();
+                            result.success(null);
+                            break;
 
-                            case "play":
-                            case "start":
-                                mediaPlayerServiceBinder.start();
-                                result.success(null);
-                                break;
+                        case "isPlaying":
+                            result.success(mediaPlayerServiceBinder.isPlaying());
+                            break;
 
-                            case "isPlaying":
-                                result.success(mediaPlayerServiceBinder.isPlaying());
-                                break;
+                        case "stop":
+                            mediaPlayerServiceBinder.stop();
+                            result.success(null);
+                            break;
 
-                            case "stop":
-                                mediaPlayerServiceBinder.stop();
-                                result.success(null);
-                                break;
+                        case "pause":
+                            mediaPlayerServiceBinder.pause();
+                            result.success(null);
+                            break;
 
-                            case "pause":
-                                mediaPlayerServiceBinder.pause();
-                                result.success(null);
-                                break;
+                        case "setDataSource":
+                            String url = methodCall.argument("path");
+                            try {
+                                mediaPlayerServiceBinder.setDataSource(url);
+                                result.success(true);
+                            } catch (IOException e) {
+                                result.error(
+                                        "MediaPlayer failed to setDataSource",
+                                        "Java Exception" + e.getMessage(),
+                                        null);
+                            }
 
-                            case "setDataSource":
-                                String url = call.argument("path");
-                                try {
-                                    mediaPlayerServiceBinder.setDataSource(url);
-                                    result.success(true);
-                                } catch (IOException e) {
-                                    result.error(
-                                            "MediaPlayer failed to setDataSource",
-                                            "Java Exception" + e.getMessage(),
-                                            null);
-                                    result.success(false);
-                                }
+                            break;
 
-                                break;
+                        case "getCurrentPosition":
+                            result.success(mediaPlayerServiceBinder.getCurrentPosition());
+                            break;
 
-                            case "getCurrentPosition":
-                                result.success(mediaPlayerServiceBinder.getCurrentPosition());
-                                break;
+                        case "getDuration":
+                            result.success(mediaPlayerServiceBinder.getDuration());
+                            break;
 
-                            case "getDuration":
-                                result.success(mediaPlayerServiceBinder.getDuration());
-                                break;
+                        case "seekTo":
+                            mediaPlayerServiceBinder.seekTo(methodCall.argument("position"));
+                            result.success(null);
+                            break;
 
-                            case "seekTo":
-                                mediaPlayerServiceBinder.seekTo(call.argument("position"));
-                                result.success(null);
-                                break;
+                        case "setLooping":
+                            mediaPlayerServiceBinder.setLooping(methodCall.argument("loop"));
+                            result.success(null);
+                            break;
 
-                            case "setLooping":
-                                mediaPlayerServiceBinder.setLooping(call.argument("loop"));
-                                result.success(null);
-                                break;
+                        case "isLooping":
+                            result.success(mediaPlayerServiceBinder.isLooping());
+                            break;
 
-                            case "isLooping":
-                                result.success(mediaPlayerServiceBinder.isLooping());
-                                break;
+                        case "setVolume":
+                            double volume = methodCall.argument("volume");
+                            mediaPlayerServiceBinder.setVolume((float) volume);
+                            result.success(null);
+                            break;
 
-                            case "setVolume":
-                                double val = call.argument("volume");
-                                float volume = (float) val;
-                                mediaPlayerServiceBinder.setVolume(volume);
-                                result.success(null);
-                                break;
-
-                            default:
-                                result.notImplemented();
-                        }
+                        default:
+                            result.notImplemented();
                     }
                 });
 
+
         // Init Service
         mediaPlayerServiceConnection = new ServiceConnection() {
-                    @Override
-                    public void onServiceConnected(ComponentName name, IBinder service) {
-                        mediaPlayerServiceBinder = (MediaPlayerService.MediaPlayerServiceBinder) service;
-                    }
+            @Override
+            public final void onServiceConnected(ComponentName name, IBinder service) {
+                mediaPlayerServiceBinder = (MediaPlayerService.MediaPlayerServiceBinder) service;
+            }
 
-                    @Override
-                    public void onServiceDisconnected(ComponentName name) {
-                        Log.d("MediaPlayerService", "onServiceDisconnected");
-                    }
-                };
+            @Override
+            public final void onServiceDisconnected(ComponentName name) {
+                Log.d("MediaPlayerService", "onServiceDisconnected");
+            }
+        };
         mediaPlayerServiceIntent = new Intent(this, MediaPlayerService.class);
         bindService(mediaPlayerServiceIntent, mediaPlayerServiceConnection, BIND_AUTO_CREATE);
 
@@ -208,7 +196,7 @@ public class MainActivity extends FlutterActivity {
 
     @Override
     protected void onDestroy() {
-        Log.d("MainActivity","onDestroy");
+        Log.d("MainActivity", "onDestroy");
         mediaPlayerServiceBinder.release();
         unbindService(mediaPlayerServiceConnection);
         startActivity(new Intent(MediaPlayerService.ACTION_STOPSELF));

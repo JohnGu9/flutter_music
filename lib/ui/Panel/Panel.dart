@@ -1551,7 +1551,7 @@ class HeroPlayButton extends StatelessWidget {
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: const InkWell(
-        onTap: MediaPlayer.onPlay,
+        onTap: MediaPlayer.onPlayAndPause,
         child: const Padding(
           padding: const EdgeInsets.all(20),
           child: const SizedBox.expand(
@@ -1578,7 +1578,7 @@ class PlayButton extends StatelessWidget {
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: const InkWell(
-        onTap: MediaPlayer.onPlay,
+        onTap: MediaPlayer.onPlayAndPause,
         child: const Padding(
           padding: const EdgeInsets.all(20),
           child: const SizedBox.expand(

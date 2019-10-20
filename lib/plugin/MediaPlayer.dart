@@ -50,6 +50,8 @@ class MediaPlayer {
             break;
           case 'preparing':
             _stateUpdate(MediaPlayerStatus.preparing);
+            // update info for notification
+            return getSongInfo();
             break;
           case 'end':
             debugPrint('MediaPlayer end');
@@ -88,19 +90,25 @@ class MediaPlayer {
         onBufferingUpdateListener(methodCall.arguments);
         return null;
 
+      case 'onPreparedListener':
+        debugPrint(methodCall.arguments.toString());
+        return null;
+
       default:
         return null;
     }
   }
 
-  static onPlay() => status == MediaPlayerStatus.started
+  static onPlayAndPause() => status == MediaPlayerStatus.started
       ? MediaPlayer.pause()
       : MediaPlayer.start();
 
-  static onSkipPrevious()=>onPrevious();
-  static onSkipNext()=>onNext();
+  static onSkipPrevious() => onPrevious();
+
+  static onSkipNext() => onNext();
   static void Function() onPrevious = () {};
   static void Function() onNext = () {};
+  static List<String> Function() getSongInfo = () => [];
 
   static final ValueNotifier<int> currentDurationNotifier =
       ValueNotifier<int>(1);
