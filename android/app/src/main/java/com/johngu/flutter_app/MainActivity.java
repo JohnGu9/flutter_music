@@ -4,6 +4,8 @@ import android.annotation.TargetApi;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 import android.os.Build;
 import android.os.Bundle;
@@ -11,10 +13,12 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 
+import androidx.palette.graphics.Palette;
+
 import java.io.IOException;
+import java.util.ArrayList;
 
 import io.flutter.app.FlutterActivity;
-import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugins.GeneratedPluginRegistrant;
 
@@ -29,7 +33,6 @@ public class MainActivity extends FlutterActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         GeneratedPluginRegistrant.registerWith(this);
-
 
         Constants.mainThreadHandler = new Handler();
 
@@ -59,22 +62,74 @@ public class MainActivity extends FlutterActivity {
 
         Constants.MediaMetadataRetrieverMethodChannel = new MethodChannel(getFlutterView(), "MMR");
         Constants.MediaMetadataRetrieverMethodChannel.setMethodCallHandler(
-                new MethodChannel.MethodCallHandler() {
+                (methodCall, result) -> {
                     MediaMetadataRetriever mmr;
+                    String path = (String) methodCall.argument("path");
 
-                    @Override
-                    public void onMethodCall(MethodCall methodCall, MethodChannel.Result result) {
-                        switch (methodCall.method) {
-                            case "getEmbeddedPicture":
-                                mmr = new MediaMetadataRetriever();
-                                mmr.setDataSource((String) methodCall.argument("path"));
-                                result.success(mmr.getEmbeddedPicture());
-                                mmr.release();
-                                break;
+                    switch (methodCall.method) {
+                        case "getEmbeddedPicture":
+                            mmr = new MediaMetadataRetriever();
+                            mmr.setDataSource(path);
+                            byte[] res = mmr.getEmbeddedPicture();
+                            result.success(res);
+                            mmr.release();
 
-                            default:
-                                result.notImplemented();
-                        }
+                            // Addition Function: Get Palette
+                            // Get Palette (Full Async) run on background
+                            if (methodCall.argument("palette")) {
+                                if (res == null) {
+                                    ArrayList list = new ArrayList<Object>();
+                                    list.add(path);
+                                    Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list);
+                                } else {
+                                    Bitmap bitmap = BitmapFactory.decodeByteArray(res, 0, res.length);
+                                    Thread thread = new Thread(() -> {
+                                        Palette palette = new Palette.Builder(bitmap).generate();
+                                        Palette.Swatch d = palette.getDominantSwatch();
+                                        Palette.Swatch v = palette.getVibrantSwatch();
+                                        Palette.Swatch m = palette.getMutedSwatch();
+//                                                Log.d("getDominantSwatch", d.toString());
+//                                                Log.d("getVibrantSwatch", v.toString());
+//                                                Log.d("getVibrantSwatch", m.toString());
+                                        ArrayList list = new ArrayList<Object>();
+                                        list.add(path);
+                                        list.add(d.getRgb());
+                                        list.add(v.getRgb());
+                                        list.add(m.getRgb());
+                                        Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list, new MethodChannel.Result() {
+                                            @Override
+                                            public void success(Object o) {
+
+                                            }
+
+                                            @Override
+                                            public void error(String s, String s1, Object o) {
+                                                Log.d(s, s1);
+                                            }
+
+                                            @Override
+                                            public void notImplemented() {
+                                                Log.d("MMR", "notImplemented");
+                                            }
+                                        }));
+                                    });
+                                    thread.setPriority(Thread.MIN_PRIORITY);
+                                    thread.start();
+                                }
+                            }
+                            break;
+                        case "getBasicInfo":
+                            mmr = new MediaMetadataRetriever();
+                            mmr.setDataSource(path);
+                            ArrayList<String> infoList = new ArrayList<String>();
+                            infoList.add(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE));
+                            infoList.add(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST));
+                            infoList.add(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM));
+                            result.success(infoList);
+                            mmr.release();
+                            break;
+                        default:
+                            result.notImplemented();
                     }
                 });
 

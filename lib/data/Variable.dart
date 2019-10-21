@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
-import 'package:palette_generator/palette_generator.dart';
 import 'package:share_extend/share_extend.dart';
 
 import '../component/CustomValueNotifier.dart';
@@ -80,14 +79,10 @@ class Variable {
     // If image has no cache yet, instance a future to cache the image data
     if (!futureImages.containsKey(path)) {
       futureImages[path] = Future<ImageProvider>(() async {
-        Future<ImageProvider> res = getArtworkFromAudioFile(path);
+        Future<ImageProvider> res = MediaMetadataRetriever.getEmbeddedPicture(path);
         // cache image data
         filePathToImageMap[path] = await res;
-        filePathToPaletteMap[path] =
-        filePathToImageMap[path] == null ? null : await PaletteGenerator
-            .fromImageProvider(filePathToImageMap[path]);
-//        debugPrint(filePathToPaletteMap[path].toString());
-        return res;
+        return filePathToImageMap[path];
       });
     }
     return Variable.futureImages[path];
@@ -103,7 +98,6 @@ class Variable {
   static final artistIdToImagesMap = Map<String, List<ImageProvider>>();
   static List<AlbumInfo> albums;
   static List<ArtistInfo> artists;
-  static final filePathToPaletteMap = Map<String, PaletteGenerator>();
 
   static Future albumToSongsMapLoading;
 

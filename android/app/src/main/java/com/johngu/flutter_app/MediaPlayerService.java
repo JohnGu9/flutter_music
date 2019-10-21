@@ -20,6 +20,8 @@ import android.os.Handler;
 import android.os.PowerManager;
 import android.util.Log;
 
+import androidx.core.app.NotificationCompat;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
@@ -56,9 +58,9 @@ public final class MediaPlayerService extends IntentService
     static private float volume;
 
     private PendingIntent contentIntent;
-    private Notification.Builder notificationPendingBuilder;
+    private NotificationCompat.Builder notificationPendingBuilder;
     private Notification notificationPending;
-    private Notification.Builder notificationActingBuilder;
+    private NotificationCompat.Builder notificationActingBuilder;
     private Notification notificationActing;
     private Bitmap emptyBitmap;
 
@@ -109,11 +111,14 @@ public final class MediaPlayerService extends IntentService
                 notificationActing = notificationActingBuilder.build();
             }
 
-            if (mediaPlayer.isPlaying()) {
-                notificationManager.notify(MediaPlayerNotifyID, notificationActing);
-            } else {
-                notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+            synchronized (this) {
+                if (mediaPlayer.isPlaying()) {
+                    notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+                } else {
+                    notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+                }
             }
+
         }
     };
 
@@ -216,66 +221,42 @@ public final class MediaPlayerService extends IntentService
             assert notificationManager != null;
             notificationManager.deleteNotificationChannel(MediaPlayerNotificationChannel_ID);
             notificationManager.createNotificationChannel(channel);
-
-            contentIntent =
-                    PendingIntent.getActivity(this,
-                            0,
-                            new Intent(this, MainActivity.class),
-                            PendingIntent.FLAG_UPDATE_CURRENT);
-
-            notificationPendingBuilder = new Notification.Builder(this, MediaPlayerNotificationChannel_ID)
-                    .setSmallIcon(android.R.drawable.ic_media_play)
-                    .setContentIntent(contentIntent)
-                    .setContentTitle("Playback")
-                    .setStyle(new Notification.MediaStyle().setShowActionsInCompactView(1));
-            notificationPendingBuilder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", MediaPlayerService.ACTION_OnPrevious));
-            notificationPendingBuilder.addAction(generateAction(android.R.drawable.ic_media_play, "Play", MediaPlayerService.ACTION_OnPlay));
-            notificationPendingBuilder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", MediaPlayerService.ACTION_OnNext));
-
-            notificationActingBuilder = new Notification.Builder(this, MediaPlayerNotificationChannel_ID)
-                    .setSmallIcon(android.R.drawable.ic_media_play)
-                    .setContentIntent(contentIntent)
-                    .setContentTitle("Playback")
-                    .setOngoing(true)
-                    .setStyle(new Notification.MediaStyle().setShowActionsInCompactView(1));
-            notificationActingBuilder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", MediaPlayerService.ACTION_OnPrevious));
-            notificationActingBuilder.addAction(generateAction(android.R.drawable.ic_media_pause, "Pause", MediaPlayerService.ACTION_OnPause));
-            notificationActingBuilder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", MediaPlayerService.ACTION_OnNext));
-        } else {
-            Intent notificationIntent = new Intent(this, MainActivity.class);
-            contentIntent =
-                    PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-
-            notificationPendingBuilder = new Notification.Builder(this)
-                    .setSmallIcon(android.R.drawable.ic_media_play)
-                    .setContentIntent(contentIntent)
-                    .setContentTitle("Playback")
-                    .setSound(null)
-                    .setStyle(new Notification.MediaStyle().setShowActionsInCompactView(1));
-            notificationPendingBuilder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", MediaPlayerService.ACTION_OnPrevious));
-            notificationPendingBuilder.addAction(generateAction(android.R.drawable.ic_media_play, "Play", MediaPlayerService.ACTION_OnPlay));
-            notificationPendingBuilder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", MediaPlayerService.ACTION_OnNext));
-
-            notificationActingBuilder = new Notification.Builder(this)
-                    .setSmallIcon(android.R.drawable.ic_media_play)
-                    .setContentIntent(contentIntent)
-                    .setContentTitle("Playback")
-                    .setSound(null)
-                    .setOngoing(true)
-                    .setStyle(new Notification.MediaStyle().setShowActionsInCompactView(1));
-            notificationActingBuilder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", MediaPlayerService.ACTION_OnPrevious));
-            notificationActingBuilder.addAction(generateAction(android.R.drawable.ic_media_pause, "Pause", MediaPlayerService.ACTION_OnPause));
-            notificationActingBuilder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", MediaPlayerService.ACTION_OnNext));
         }
+        contentIntent =
+                PendingIntent.getActivity(this,
+                        0,
+                        new Intent(this, MainActivity.class),
+                        PendingIntent.FLAG_UPDATE_CURRENT);
+
+        notificationPendingBuilder = new NotificationCompat.Builder(this, MediaPlayerNotificationChannel_ID)
+                .setSmallIcon(R.drawable.ic_stat_name)
+                .setContentIntent(contentIntent)
+                .setContentTitle("Playback")
+                .setSound(null)
+                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(1));
+        notificationPendingBuilder.addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious));
+        notificationPendingBuilder.addAction(generateAction(R.drawable.ic_play, "Play", MediaPlayerService.ACTION_OnPlay));
+        notificationPendingBuilder.addAction(generateAction(R.drawable.ic_next, "Next", MediaPlayerService.ACTION_OnNext));
+
+        notificationActingBuilder = new NotificationCompat.Builder(this, MediaPlayerNotificationChannel_ID)
+                .setSmallIcon(R.drawable.ic_stat_name)
+                .setContentIntent(contentIntent)
+                .setContentTitle("Playback")
+                .setSound(null)
+                .setOngoing(true)
+                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(1));
+        notificationActingBuilder.addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious));
+        notificationActingBuilder.addAction(generateAction(R.drawable.ic_pause, "Pause", MediaPlayerService.ACTION_OnPause));
+        notificationActingBuilder.addAction(generateAction(R.drawable.ic_next, "Next", MediaPlayerService.ACTION_OnNext));
         notificationManager.cancel(MediaPlayerNotifyID);
     }
 
     @TargetApi(Build.VERSION_CODES.M)
-    private Notification.Action generateAction(int icon, String title, String intentAction) {
+    private NotificationCompat.Action generateAction(int icon, String title, String intentAction) {
         Intent intent = new Intent(getApplicationContext(), MediaPlayerService.class);
         intent.setAction(intentAction);
         PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 1, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-        return new Notification.Action.Builder(icon, title, pendingIntent).build();
+        return new NotificationCompat.Action.Builder(icon, title, pendingIntent).build();
     }
 
     public class MediaPlayerServiceBinder extends Binder {
@@ -329,23 +310,25 @@ public final class MediaPlayerService extends IntentService
                     title = res.get(0);
                     artist = res.get(1);
                     album = res.get(2);
-                    new Thread(updateNotificationRunnable).start();
+                    Thread thread = new Thread(updateNotificationRunnable);
+                    thread.setPriority(Thread.MIN_PRIORITY);
+                    thread.start();
                 }
 
                 @Override
                 public void error(String s, String s1, Object o) {
-                    title = null;
-                    artist = null;
-                    album = null;
-                    new Thread(updateNotificationRunnable).start();
+                    album = artist = title = null;
+                    Thread thread = new Thread(updateNotificationRunnable);
+                    thread.setPriority(Thread.MIN_PRIORITY);
+                    thread.start();
                 }
 
                 @Override
                 public void notImplemented() {
-                    title = null;
-                    artist = null;
-                    album = null;
-                    new Thread(updateNotificationRunnable).start();
+                    album = artist = title = null;
+                    Thread thread = new Thread(updateNotificationRunnable);
+                    thread.setPriority(Thread.MIN_PRIORITY);
+                    thread.start();
                 }
             });
             mediaPlayer.prepareAsync();
