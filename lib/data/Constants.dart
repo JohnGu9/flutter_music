@@ -133,7 +133,8 @@ class Constants {
             children: <Widget>[
               toHero,
               FadeTransition(
-                  opacity: animation.drive(CurveTween(curve: Curves.easeInCirc)),
+                  opacity:
+                      animation.drive(CurveTween(curve: Curves.easeInCirc)),
                   child: fromHero),
             ],
           );
@@ -279,13 +280,14 @@ class Constants {
     );
   }
 
+  static const double decorationOpacity = 0.5;
   static const Widget emptyArtwork = const SizedBox.expand(
     child: const FittedBox(
       fit: BoxFit.contain,
       child: const ScaleTransition(
         scale: const AlwaysStoppedAnimation<double>(0.5),
         child: const FadeTransition(
-          opacity: const AlwaysStoppedAnimation<double>(0.5),
+          opacity: const AlwaysStoppedAnimation<double>(decorationOpacity),
           child: const Icon(Icons.music_note),
         ),
       ),
@@ -298,7 +300,7 @@ class Constants {
       child: const ScaleTransition(
         scale: const AlwaysStoppedAnimation<double>(0.5),
         child: const FadeTransition(
-          opacity: const AlwaysStoppedAnimation<double>(0.5),
+          opacity: const AlwaysStoppedAnimation<double>(decorationOpacity),
           child: const Icon(Icons.person_pin),
         ),
       ),
@@ -310,6 +312,7 @@ class Constants {
   static textStyleWithShadow(TextStyle textStyle, Color color) {
     return TextStyle(
       fontWeight: textStyle.fontWeight,
+      color: textStyle.color.withOpacity(decorationOpacity),
       shadows: [
         Shadow(
           blurRadius: 20.0,

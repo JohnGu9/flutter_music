@@ -28,7 +28,10 @@ class _AlbumViewItemState extends State<AlbumViewItem> {
     await SchedulerBinding.instance.endOfFrame;
     _image = await Variable.getImageFromAlbums(widget.album);
     await SchedulerBinding.instance.endOfFrame;
-    setState(() => _loaded = true);
+    _loaded = true;
+    if(mounted){
+      setState(() {} );
+    }
   }
 
   static const _innerScrollDuration = Duration(milliseconds: 335);

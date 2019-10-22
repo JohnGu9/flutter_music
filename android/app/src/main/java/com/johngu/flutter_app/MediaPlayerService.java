@@ -99,19 +99,15 @@ public final class MediaPlayerService extends IntentService
                 Bitmap bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
                 notificationPendingBuilder.setLargeIcon(bitmap);
                 notificationActingBuilder.setLargeIcon(bitmap);
-//                notificationPendingBuilder.setColor(Color.argb(255,0,0,127));
-//                notificationActingBuilder.setColor(Color.argb(255,0,0,127));
                 notificationPending = notificationPendingBuilder.build();
                 notificationActing = notificationActingBuilder.build();
+                bitmap.recycle();
             } else {
                 notificationPendingBuilder.setLargeIcon(emptyBitmap);
                 notificationActingBuilder.setLargeIcon(emptyBitmap);
-//                notificationPendingBuilder.setColor(Color.argb(255,255,255,255));
-//                notificationActingBuilder.setColor(Color.argb(255,255,255,255));
                 notificationPending = notificationPendingBuilder.build();
                 notificationActing = notificationActingBuilder.build();
             }
-
             synchronized (this) {
                 if (mediaPlayer.isPlaying()) {
                     notificationManager.notify(MediaPlayerNotifyID, notificationActing);
@@ -137,6 +133,7 @@ public final class MediaPlayerService extends IntentService
         mediaPlayerServiceBinder = new MediaPlayerServiceBinder();
         audioFocusRequestHandler = new Handler();
         volume = -1;
+
     }
 
     @Override
@@ -146,7 +143,14 @@ public final class MediaPlayerService extends IntentService
         NotificationInit();
         Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "idle");
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
-
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
+            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(audioAttributes)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setWillPauseWhenDucked(true)
+                    .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
+                    .build();
+        }
     }
 
     @Override
@@ -175,14 +179,6 @@ public final class MediaPlayerService extends IntentService
 
     private int audioFocusRequest() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (audioFocusRequest == null) {
-                audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                        .setAudioAttributes(audioAttributes)
-                        .setAcceptsDelayedFocusGain(true)
-                        .setWillPauseWhenDucked(true)
-                        .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
-                        .build();
-            }
             audioManager.abandonAudioFocusRequest(audioFocusRequest);
             return audioManager.requestAudioFocus(audioFocusRequest);
         } else {
@@ -400,8 +396,8 @@ public final class MediaPlayerService extends IntentService
 
             synchronized (this) {
                 if (state == State.Initialized && path == currentDataSource) {
-                    mediaPlayer.prepareAsync();
                     state = State.Preparing;
+                    mediaPlayer.prepareAsync();
                 }
             }
         }

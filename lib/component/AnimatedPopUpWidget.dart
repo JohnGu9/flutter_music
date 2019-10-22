@@ -32,7 +32,9 @@ class _FadeInWidgetState extends State<FadeInWidget>
   _setupController() async {
     _controller = AnimationController(vsync: this, duration: widget.duration);
     await Future.delayed(widget.delay);
-    _controller.animateTo(1.0, curve: Curves.linearToEaseOut);
+    if (mounted) {
+      _controller.animateTo(1.0, curve: Curves.linearToEaseOut);
+    }
   }
 
   @override

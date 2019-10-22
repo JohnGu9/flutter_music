@@ -124,8 +124,8 @@ class _AlbumViewPageState extends State<AlbumViewPage> {
                   backgroundColor: Theme.of(context).backgroundColor,
                   flexibleSpace: FlexibleSpaceBar(
                     centerTitle: true,
-                    title: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 100.0),
+                    title: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width/2),
                       child: AutoSizeText(
                         widget.album.title,
                         style: Constants.textStyleWithShadow(

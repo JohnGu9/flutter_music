@@ -16,6 +16,7 @@ class MediaMetadataRetriever {
         String path = palette[index++];
         if (palette.length == index) {
           filePathToPaletteMap[path] = null;
+          debugPrint('Palette is null');
         } else {
           List<Color> colors = List<Color>();
           for (; index < palette.length;) {
@@ -37,8 +38,7 @@ class MediaMetadataRetriever {
   static Color colorParse(int rgb) => Color.fromARGB(
       255, (rgb & 16711680) >> 16, (rgb & 65280) >> 8, (rgb & 255));
 
-// raw api async
-// return ImageProvider
+  // raw api async
   static Future<ImageProvider> getEmbeddedPicture(String path) async =>
       Future.microtask(() async {
         final Uint8List list = await MediaMetadataRetrieverCHANNEL.invokeMethod(

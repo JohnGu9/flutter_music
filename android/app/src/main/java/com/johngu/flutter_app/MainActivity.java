@@ -82,9 +82,6 @@ public class MainActivity extends FlutterActivity {
                                         Palette.Swatch d = palette.getDominantSwatch();
                                         Palette.Swatch v = palette.getVibrantSwatch();
                                         Palette.Swatch m = palette.getMutedSwatch();
-//                                                Log.d("getDominantSwatch", d.toString());
-//                                                Log.d("getVibrantSwatch", v.toString());
-//                                                Log.d("getVibrantSwatch", m.toString());
                                         ArrayList list = new ArrayList<Object>();
                                         list.add(path);
                                         list.add(d.getRgb());
@@ -106,6 +103,7 @@ public class MainActivity extends FlutterActivity {
                                                 Log.d("MMR", "notImplemented");
                                             }
                                         }));
+                                        bitmap.recycle();
                                     });
                                     thread.setPriority(Thread.MIN_PRIORITY);
                                     thread.start();

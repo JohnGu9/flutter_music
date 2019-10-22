@@ -25,7 +25,9 @@ class _SongTileArtworkState extends State<SongTileArtwork> {
   _loadImageAsync() async {
     imageProvider =
         await Variable.getArtworkAsync(path: widget.songInfo.filePath);
-    setState(() {});
+    if(mounted){
+      setState(() {});
+    }
   }
 
   @override

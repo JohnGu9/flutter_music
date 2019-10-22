@@ -66,8 +66,8 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
       flexibleSpace: FlexibleSpaceBar(
         collapseMode: CollapseMode.pin,
         centerTitle: true,
-        title: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 100.0),
+        title: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width/2),
           child: AutoSizeText(
             widget.artist.name,
             style: Constants.textStyleWithShadow(
