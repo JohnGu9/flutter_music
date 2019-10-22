@@ -33,18 +33,17 @@ class Variable {
 
   // Data
   static final CustomValueNotifier<List> currentList =
-  CustomValueNotifier(null);
+      CustomValueNotifier(null);
   static final CustomValueNotifier<SongInfo> currentItem =
-  CustomValueNotifier(null);
+      CustomValueNotifier(null);
 
   static final CustomValueNotifier<List<SongInfo>> defaultList =
-  CustomValueNotifier(null);
+      CustomValueNotifier(null);
   static final CustomValueNotifier<List<SongInfo>> favouriteList =
-  CustomValueNotifier(null);
+      CustomValueNotifier(null);
 
   // copy from AntiBlockingWidget
   static const AntiBlockDuration = const Duration(milliseconds: 400);
-
   static setCurrentSong(List<SongInfo> songList, SongInfo songInfo) async {
     // Alarm: songInfo must be come from filePathToSongMap
     if (Variable.currentList.value != songList) {
@@ -67,11 +66,11 @@ class Variable {
 //      currentAbstractList = CustomValueNotifier(null);
 
   static final Map<String, Future<ImageProvider>> futureImages =
-  Map<String, Future<ImageProvider>>(); // Get image async
+      Map<String, Future<ImageProvider>>(); // Get image async
   static final Map<String, ImageProvider> filePathToImageMap = Map<String,
       ImageProvider>(); // Get data sync, but if data isn't ready, it will return null.
 
-  // This function must be called before get image from images(above) sync
+  // This function must be called before get image from filePathToImageMap(above) sync
   static Future<ImageProvider> getArtworkAsync({String path}) async {
     if (path == null) {
       return null;
@@ -79,7 +78,8 @@ class Variable {
     // If image has no cache yet, instance a future to cache the image data
     if (!futureImages.containsKey(path)) {
       futureImages[path] = Future<ImageProvider>(() async {
-        Future<ImageProvider> res = MediaMetadataRetriever.getEmbeddedPicture(path);
+        Future<ImageProvider> res =
+            MediaMetadataRetriever.getEmbeddedPicture(path);
         // cache image data
         filePathToImageMap[path] = await res;
         return filePathToImageMap[path];
@@ -118,7 +118,7 @@ class Variable {
     for (int i = 0; i < albums.length;) {
       final AlbumInfo albumInfo = albums[i];
       final List<SongInfo> songs =
-      await audioQuery.getSongsFromAlbum(album: albumInfo);
+          await audioQuery.getSongsFromAlbum(album: albumInfo);
       for (int i = 0; i < songs.length; i++) {
         songs[i] = filePathToSongMap[songs[i].filePath];
       }
@@ -140,6 +140,7 @@ class Variable {
     // Sort artists
     final List<ArtistInfo> _unknownArtists = List();
     for (int i = 0; i < Variable.artists.length;) {
+      await SchedulerBinding.instance.endOfFrame;
       if (artists[i].name == Constants.unknown) {
         _unknownArtists.add(artists.removeAt(i));
       } else {
@@ -155,7 +156,7 @@ class Variable {
       await SchedulerBinding.instance.endOfFrame;
       final ArtistInfo artistInfo = artists[i];
       final List<SongInfo> songs =
-      await audioQuery.getSongsFromArtist(artist: artistInfo);
+          await audioQuery.getSongsFromArtist(artist: artistInfo);
       for (int i = 0; i < songs.length; i++) {
         songs[i] = Variable.filePathToSongMap[songs[i].filePath];
       }
@@ -174,7 +175,7 @@ class Variable {
     for (final SongInfo songInfo in songs) {
       await SchedulerBinding.instance.endOfFrame;
       final ImageProvider image =
-      await Variable.getArtworkAsync(path: songInfo.filePath);
+          await Variable.getArtworkAsync(path: songInfo.filePath);
       if (image != null) {
         return image;
       }
@@ -189,7 +190,7 @@ class Variable {
     for (final SongInfo songInfo in songs) {
       await SchedulerBinding.instance.endOfFrame;
       final ImageProvider image =
-      await Variable.getArtworkAsync(path: songInfo.filePath);
+          await Variable.getArtworkAsync(path: songInfo.filePath);
       if (image != null) {
         list.add(image);
       }
@@ -212,12 +213,9 @@ class Variable {
   }
 
   static final CustomValueNotifier<bool> panelAntiBlock =
-  CustomValueNotifier<bool>(true);
-
-  static Future pageRouteTransition;
+      CustomValueNotifier<bool>(true);
 
   static AnimationController playButtonController;
-
   static final PlayListSequence playListSequence = PlayListSequence();
 
   static TabController tabController;
@@ -226,15 +224,15 @@ class Variable {
 
   static shareSong(SongInfo songInfo) async {
     File testFile = new File(songInfo.filePath);
-    if (!await testFile.exists()) {
+    if (await testFile.exists()) {
+      ShareExtend.share(testFile.path, "file");
+    } else {
       debugPrint("File doesn't exist");
     }
-    ShareExtend.share(testFile.path, "file");
   }
 }
 
 bool _updating = false;
-
 void onFavorite(SongInfo songInfo) async {
   if (songInfo == null || _updating) {
     return;

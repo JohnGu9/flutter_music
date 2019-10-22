@@ -28,7 +28,7 @@ class HeroArtwork extends StatelessWidget {
     return Hero(
       tag: songInfo.hashCode.toString() + 'cover',
       transitionOnUserGestures: true,
-      child: ArtWork(
+      child: Artwork(
         songInfo: songInfo,
         onTap: onTap,
       ),
@@ -36,16 +36,16 @@ class HeroArtwork extends StatelessWidget {
   }
 }
 
-class ArtWork extends StatefulWidget {
-  const ArtWork({Key key, this.songInfo, this.onTap}) : super(key: key);
+class Artwork extends StatefulWidget {
+  const Artwork({Key key, this.songInfo, this.onTap}) : super(key: key);
   final songInfo;
   final onTap;
 
   @override
-  _ArtWorkState createState() => _ArtWorkState();
+  _ArtworkState createState() => _ArtworkState();
 }
 
-class _ArtWorkState extends State<ArtWork> {
+class _ArtworkState extends State<Artwork> {
   ImageProvider image;
 
   @override

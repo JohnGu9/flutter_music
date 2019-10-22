@@ -124,7 +124,7 @@ class Constants {
             children: <Widget>[
               fromHero,
               FadeTransition(
-                opacity: animation.drive(CurveTween(curve: Curves.linear)),
+                opacity: animation.drive(CurveTween(curve: Curves.easeInCirc)),
                 child: toHero,
               ),
             ],
@@ -133,8 +133,7 @@ class Constants {
             children: <Widget>[
               toHero,
               FadeTransition(
-                  opacity:
-                      animation.drive(CurveTween(curve: Curves.linear)),
+                  opacity: animation.drive(CurveTween(curve: Curves.easeInCirc)),
                   child: fromHero),
             ],
           );
@@ -378,28 +377,27 @@ const _defaultAlertDialogTitle = Text('Tip');
 const _defaultAlertDialogContent = Text('This feature is not available yet. ');
 
 // ignore: non_constant_identifier_names
-FeatureUnsupportedDialog(BuildContext context) async {
-  Future.microtask(() async => showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          // return object of type Dialog
-          return AlertDialog(
-            backgroundColor: Theme.of(context).backgroundColor,
-            title: _defaultAlertDialogTitle,
-            content: _defaultAlertDialogContent,
-            actions: <Widget>[
-              // usually buttons at the bottom of the dialog
-              FlatButton(
-                child: Text(
-                  "Close",
-                  style: Theme.of(context).textTheme.body2,
+FeatureUnsupportedDialog(BuildContext context) async =>
+    Future.microtask(() async => showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            // return object of type Dialog
+            return AlertDialog(
+              backgroundColor: Theme.of(context).backgroundColor,
+              title: _defaultAlertDialogTitle,
+              content: _defaultAlertDialogContent,
+              actions: <Widget>[
+                // usually buttons at the bottom of the dialog
+                FlatButton(
+                  child: Text(
+                    "Close",
+                    style: Theme.of(context).textTheme.body2,
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
                 ),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          );
-        },
-      ));
-}
+              ],
+            );
+          },
+        ));

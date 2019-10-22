@@ -3,11 +3,11 @@ import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'plugin/AndroidPlugin.dart';
-import 'plugin/MediaPlayer.dart';
 
 import 'data/Constants.dart';
 import 'data/Variable.dart';
+import 'plugin/AndroidPlugin.dart';
+import 'plugin/MediaPlayer.dart';
 import 'ui/Panel/Panel.dart';
 import 'ui/PlayList/PlayList.dart';
 
@@ -90,9 +90,46 @@ mediaPlayerSetup() async {
       }
     }
   };
-
   MediaPlayer.setOnCompletionListener(_onCompletionListener);
+  MediaPlayer.onPrevious = () {
+    debugPrint('onPrevious');
+    final list = Variable.currentList;
+    final item = Variable.currentItem;
+    if (list.value == null ||
+        list.value.length <= 1 ||
+        item.value == null ||
+        !list.value.contains(item.value)) {
+      debugPrint('onPrevious failed');
+      return;
+    }
+    int index = list.value.indexOf(item.value) - 1;
+    if (index < 0) {
+      index = list.value.length - 1;
+    }
+    item.value = list.value[index];
+  };
+  MediaPlayer.onNext = () {
+    final list = Variable.currentList;
+    final item = Variable.currentItem;
+    if (list.value == null ||
+        list.value.length <= 1 ||
+        item.value == null ||
+        !list.value.contains(item.value)) {
+      return;
+    }
+    int index = list.value.indexOf(item.value) + 1;
+    if (index >= list.value.length) {
+      index = 0;
+    }
+    item.value = list.value[index];
+  };
+  MediaPlayer.getSongInfo = () => [
+        Variable.currentItem.value.title,
+        Variable.currentItem.value.artist,
+        Variable.currentItem.value.album
+      ];
 
+  return;
 }
 
 class MyApp extends StatefulWidget {

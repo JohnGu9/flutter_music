@@ -21,6 +21,7 @@ import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
+import androidx.media.app.NotificationCompat.MediaStyle;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,31 +46,31 @@ public final class MediaPlayerService extends IntentService
     static public final String ACTION_OnNext = "com.johngu.onNext";
     static public final String ACTION_STOPSELF = "com.johngu.STOPSELF";
 
+    enum State {Idle, Initialized, Preparing, Prepared}
+
     static private MediaPlayer mediaPlayer;
+    static private volatile State state;
     static private AudioManager audioManager;
     static private NotificationManager notificationManager;
     static private AudioAttributes audioAttributes;
     static private AudioFocusRequest audioFocusRequest;
     static private Handler audioFocusRequestHandler;
-    static private String currentDataSource;
+    static private volatile String currentDataSource;
     static private String title;
     static private String artist;
     static private String album;
     static private float volume;
 
-    private PendingIntent contentIntent;
     private NotificationCompat.Builder notificationPendingBuilder;
-    private Notification notificationPending;
+    static private Notification notificationPending;
     private NotificationCompat.Builder notificationActingBuilder;
-    private Notification notificationActing;
-    private Bitmap emptyBitmap;
+    static private Notification notificationActing;
+    static private Bitmap emptyBitmap;
 
-    private final Runnable onPlayRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "started");
-    private final Runnable onPauseRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "paused");
-    private final Runnable onPreviousRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("onPrevious", null);
-    private final Runnable onNextRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("onNext", null);
-
-
+    static private final Runnable onPlayRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "started");
+    static private final Runnable onPauseRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "paused");
+    static private final Runnable onPreviousRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("onPrevious", null);
+    static private final Runnable onNextRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("onNext", null);
     private final Runnable updateNotificationRunnable = new Runnable() {
         @Override
         public void run() {
@@ -128,7 +129,7 @@ public final class MediaPlayerService extends IntentService
     static final int MediaPlayerNotificationChannel_IMPORTANT = NotificationManager.IMPORTANCE_DEFAULT;
     static final int MediaPlayerNotifyID = 0;
 
-    public MediaPlayerServiceBinder mediaPlayerServiceBinder;
+    static public MediaPlayerServiceBinder mediaPlayerServiceBinder;
 
 
     public MediaPlayerService() {
@@ -206,12 +207,14 @@ public final class MediaPlayerService extends IntentService
         mediaPlayer.setAudioAttributes(audioAttributes);
     }
 
-    @TargetApi(Build.VERSION_CODES.M)
     private void NotificationInit() {
         // Create the NotificationChannel, but only on API 26+ because
         // the NotificationChannel class is new and not in the support library
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(MediaPlayerNotificationChannel_ID, MediaPlayerNotificationChannel_NAME, MediaPlayerNotificationChannel_IMPORTANT);
+            NotificationChannel channel = new NotificationChannel(
+                    MediaPlayerNotificationChannel_ID,
+                    MediaPlayerNotificationChannel_NAME,
+                    MediaPlayerNotificationChannel_IMPORTANT);
             channel.setDescription(MediaPlayerNotificationChannel_DESCRIPTION);
             channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             channel.setSound(null, null);
@@ -222,21 +225,22 @@ public final class MediaPlayerService extends IntentService
             notificationManager.deleteNotificationChannel(MediaPlayerNotificationChannel_ID);
             notificationManager.createNotificationChannel(channel);
         }
-        contentIntent =
-                PendingIntent.getActivity(this,
-                        0,
-                        new Intent(this, MainActivity.class),
-                        PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent contentIntent = PendingIntent.getActivity(this,
+                0,
+                new Intent(this, MainActivity.class),
+                PendingIntent.FLAG_UPDATE_CURRENT);
 
+        MediaStyle mediaStyle = new MediaStyle().setShowActionsInCompactView(1);
         notificationPendingBuilder = new NotificationCompat.Builder(this, MediaPlayerNotificationChannel_ID)
                 .setSmallIcon(R.drawable.ic_stat_name)
                 .setContentIntent(contentIntent)
                 .setContentTitle("Playback")
                 .setSound(null)
-                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(1));
-        notificationPendingBuilder.addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious));
-        notificationPendingBuilder.addAction(generateAction(R.drawable.ic_play, "Play", MediaPlayerService.ACTION_OnPlay));
-        notificationPendingBuilder.addAction(generateAction(R.drawable.ic_next, "Next", MediaPlayerService.ACTION_OnNext));
+                .setOngoing(false)
+                .setStyle(mediaStyle)
+                .addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious))
+                .addAction(generateAction(R.drawable.ic_play, "Play", MediaPlayerService.ACTION_OnPlay))
+                .addAction(generateAction(R.drawable.ic_next, "Next", MediaPlayerService.ACTION_OnNext));
 
         notificationActingBuilder = new NotificationCompat.Builder(this, MediaPlayerNotificationChannel_ID)
                 .setSmallIcon(R.drawable.ic_stat_name)
@@ -244,14 +248,14 @@ public final class MediaPlayerService extends IntentService
                 .setContentTitle("Playback")
                 .setSound(null)
                 .setOngoing(true)
-                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(1));
-        notificationActingBuilder.addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious));
-        notificationActingBuilder.addAction(generateAction(R.drawable.ic_pause, "Pause", MediaPlayerService.ACTION_OnPause));
-        notificationActingBuilder.addAction(generateAction(R.drawable.ic_next, "Next", MediaPlayerService.ACTION_OnNext));
+                .setStyle(mediaStyle)
+                .addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious))
+                .addAction(generateAction(R.drawable.ic_pause, "Pause", MediaPlayerService.ACTION_OnPause))
+                .addAction(generateAction(R.drawable.ic_next, "Next", MediaPlayerService.ACTION_OnNext));
+
         notificationManager.cancel(MediaPlayerNotifyID);
     }
 
-    @TargetApi(Build.VERSION_CODES.M)
     private NotificationCompat.Action generateAction(int icon, String title, String intentAction) {
         Intent intent = new Intent(getApplicationContext(), MediaPlayerService.class);
         intent.setAction(intentAction);
@@ -298,11 +302,8 @@ public final class MediaPlayerService extends IntentService
             Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "end");
         }
 
-        public final void setDataSource(String url) throws IOException {
-            //      executor.submit(new setDataSourceCallable(url));
-            mediaPlayer.reset();
-            currentDataSource = url;
-            mediaPlayer.setDataSource(currentDataSource);
+        public final void setDataSource(String path) {
+            currentDataSource = path;
             Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "preparing", new MethodChannel.Result() {
                 @Override
                 public void success(Object o) {
@@ -331,8 +332,9 @@ public final class MediaPlayerService extends IntentService
                     thread.start();
                 }
             });
-            mediaPlayer.prepareAsync();
-
+            Thread prepareThread = new Thread(new SetDataSourceRunnable(path));
+            prepareThread.setPriority(Thread.MIN_PRIORITY);
+            prepareThread.start();
         }
 
         public final int getCurrentPosition() {
@@ -365,13 +367,55 @@ public final class MediaPlayerService extends IntentService
         }
     }
 
-    private void onPlay() {
-        int res = audioFocusRequest();
-        if (res != AudioManager.AUDIOFOCUS_REQUEST_FAILED) {
-            mediaPlayer.start();
-            notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+    class SetDataSourceRunnable implements Runnable {
+        final String path;
+
+        public SetDataSourceRunnable(String path) {
+            this.path = path;
         }
-        Constants.mainThreadHandler.post(onPlayRunnable);
+
+        @Override
+        public void run() {
+            synchronized (this) {
+                if (state != State.Idle && path == currentDataSource) {
+                    mediaPlayer.reset();
+                    state = State.Idle;
+                } else if (path != currentDataSource) {
+                    return;
+                }
+            }
+
+            synchronized (this) {
+                if (state == State.Idle && path == currentDataSource) {
+                    try {
+                        mediaPlayer.setDataSource(currentDataSource);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    state = State.Initialized;
+                } else {
+                    return;
+                }
+            }
+
+            synchronized (this) {
+                if (state == State.Initialized && path == currentDataSource) {
+                    mediaPlayer.prepareAsync();
+                    state = State.Preparing;
+                }
+            }
+        }
+    }
+
+    private void onPlay() {
+        if (state == State.Prepared) {
+            int res = audioFocusRequest();
+            if (res != AudioManager.AUDIOFOCUS_REQUEST_FAILED) {
+                mediaPlayer.start();
+                notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+            }
+            Constants.mainThreadHandler.post(onPlayRunnable);
+        }
     }
 
     private void onPause() {
@@ -413,6 +457,7 @@ public final class MediaPlayerService extends IntentService
 
     @Override
     public final void onPrepared(MediaPlayer mediaPlayer) {
+        state = State.Prepared;
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onPreparedListener",
                 // onPrepared will return duration

@@ -1,13 +1,11 @@
 package com.johngu.flutter_app;
 
-import android.annotation.TargetApi;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -28,7 +26,6 @@ public class MainActivity extends FlutterActivity {
     static MediaPlayerService.MediaPlayerServiceBinder mediaPlayerServiceBinder;
     static ServiceConnection mediaPlayerServiceConnection;
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -50,9 +47,6 @@ public class MainActivity extends FlutterActivity {
                         case "moveTaskToBack":
                             moveTaskToBack(true);
                             result.success(null);
-                            break;
-
-                        case "notification":
                             break;
 
                         default:
@@ -186,16 +180,8 @@ public class MainActivity extends FlutterActivity {
 
                         case "setDataSource":
                             String url = methodCall.argument("path");
-                            try {
-                                mediaPlayerServiceBinder.setDataSource(url);
-                                result.success(true);
-                            } catch (IOException e) {
-                                result.error(
-                                        "MediaPlayer failed to setDataSource",
-                                        "Java Exception" + e.getMessage(),
-                                        null);
-                            }
-
+                            mediaPlayerServiceBinder.setDataSource(url);
+                            result.success(true);
                             break;
 
                         case "getCurrentPosition":
@@ -231,7 +217,6 @@ public class MainActivity extends FlutterActivity {
                     }
                 });
 
-
         // Init Service
         mediaPlayerServiceConnection = new ServiceConnection() {
             @Override
@@ -257,6 +242,4 @@ public class MainActivity extends FlutterActivity {
         startActivity(new Intent(MediaPlayerService.ACTION_STOPSELF));
         super.onDestroy();
     }
-
-
 }

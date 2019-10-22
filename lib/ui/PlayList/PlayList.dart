@@ -150,43 +150,7 @@ class _PlayListState extends State<PlayList>
       await Future.delayed(const Duration(milliseconds: 300));
     }
     await Variable.mediaPlayerLoading;
-    MediaPlayer.onPrevious = () {
-      debugPrint('onPrevious');
-      final list = Variable.currentList;
-      final item = Variable.currentItem;
-      if (list.value == null ||
-          list.value.length <= 1 ||
-          item.value == null ||
-          !list.value.contains(item.value)) {
-        debugPrint('onPrevious failed');
-        return;
-      }
-      int index = list.value.indexOf(item.value) - 1;
-      if (index < 0) {
-        index = list.value.length - 1;
-      }
-      item.value = list.value[index];
-    };
-    MediaPlayer.onNext = () {
-      final list = Variable.currentList;
-      final item = Variable.currentItem;
-      if (list.value == null ||
-          list.value.length <= 1 ||
-          item.value == null ||
-          !list.value.contains(item.value)) {
-        return;
-      }
-      int index = list.value.indexOf(item.value) + 1;
-      if (index >= list.value.length) {
-        index = 0;
-      }
-      item.value = list.value[index];
-    };
-    MediaPlayer.getSongInfo = () => [
-          Variable.currentItem.value.title,
-          Variable.currentItem.value.artist,
-          Variable.currentItem.value.album
-        ];
+
 
     // Start Load PlayList
     final defaultListNotifier = Variable.defaultList;
