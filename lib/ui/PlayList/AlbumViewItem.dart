@@ -1,6 +1,5 @@
 import 'dart:math';
 
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
@@ -147,18 +146,24 @@ class ForegroundView extends StatelessWidget {
                     children: <Widget>[
                       Expanded(
                         flex: 10,
-                        child: AutoSizeText(
-                          album.title,
-                          style: Theme.of(context).textTheme.title,
-                          maxLines: 1,
+                        child: FittedBox(
+                          fit: BoxFit.contain,
+                          child: Text(
+                            album.title,
+                            style: Theme.of(context).textTheme.title,
+                            maxLines: 1,
+                          ),
                         ),
                       ),
                       Expanded(
                         flex: 9,
-                        child: AutoSizeText(
-                          album.artist,
-                          style: Theme.of(context).textTheme.body1,
-                          maxLines: 1,
+                        child: FittedBox(
+                          fit: BoxFit.contain,
+                          child: Text(
+                            album.artist,
+                            style: Theme.of(context).textTheme.body1,
+                            maxLines: 1,
+                          ),
                         ),
                       ),
                     ],

@@ -159,23 +159,22 @@ class HeroArtist extends StatelessWidget {
   }
 }
 
-void onRepeat() {
-  Variable.playListSequence.nextState();
-}
-
+void onRepeat() => Variable.playListSequence.nextState();
 
 class MiniPanel extends StatelessWidget {
   const MiniPanel({Key key}) : super(key: key);
 
   static Widget _routeBuilder(BuildContext context) => const FullScreenPanel();
+  static CustomCupertinoPageRoute pageRoute =
+      CustomCupertinoPageRoute(builder: _routeBuilder);
 
   static Future _generalPushRoute(BuildContext context) async {
     await SchedulerBinding.instance.endOfFrame;
     return await Future.microtask(
-      () => Navigator.push(
-        context,
-        CustomCupertinoPageRoute(builder: _routeBuilder),
-      ),
+      () {
+        pageRoute = CustomCupertinoPageRoute(builder: _routeBuilder);
+        Navigator.push(context, pageRoute);
+      },
     );
   }
 
@@ -273,11 +272,7 @@ class _ArtworkViewForMiniPanelState extends State<ArtworkViewForMiniPanel> {
               .animateToPage(_list.value.indexOf(_item.value),
                   duration: Constants.defaultDuration, curve: Curves.decelerate)
               .then((value) {
-            try {
-              if (pageController?.page == _list.value.indexOf(_item.value)) {
-                pageControllerIsAnimating.value = false;
-              }
-            } catch (e) {
+            if (pageController?.page == _list.value.indexOf(_item.value)) {
               pageControllerIsAnimating.value = false;
             }
           });
@@ -288,11 +283,7 @@ class _ArtworkViewForMiniPanelState extends State<ArtworkViewForMiniPanel> {
                   duration: Constants.defaultDuration,
                   curve: Curves.fastOutSlowIn)
               .then((value) {
-            try {
-              if (pageController?.page == _list.value.indexOf(_item.value)) {
-                pageControllerIsAnimating.value = false;
-              }
-            } catch (e) {
+            if (pageController?.page == _list.value.indexOf(_item.value)) {
               pageControllerIsAnimating.value = false;
             }
           });
@@ -305,11 +296,7 @@ class _ArtworkViewForMiniPanelState extends State<ArtworkViewForMiniPanel> {
                   duration: Constants.defaultShortDuration,
                   curve: Curves.decelerate)
               .then((value) {
-            try {
-              if (pageController?.page == _list.value.indexOf(_item.value)) {
-                pageControllerIsAnimating.value = false;
-              }
-            } catch (e) {
+            if (pageController?.page == _list.value.indexOf(_item.value)) {
               pageControllerIsAnimating.value = false;
             }
           });
@@ -1026,18 +1013,15 @@ class _ArtworkPageViewForFullScreenPanelState
       // debugPrint('index: ' + index.toString());
 
       if ((pageController.page - index).abs() > 0.5) {
-        debugPrint('pageControllerIsAnimating');
         if (pageControllerIsAnimating.value) {
           pageController
               .animateToPage(index,
                   duration: Constants.defaultDuration, curve: Curves.decelerate)
               .then((value) {
-            try {
+            if (mounted) {
               if (pageController?.page == _list.value.indexOf(_item.value)) {
                 pageControllerIsAnimating.value = false;
               }
-            } catch (e) {
-              pageControllerIsAnimating.value = false;
             }
           });
           pageControllerIsAnimating.value = true;
@@ -1047,12 +1031,10 @@ class _ArtworkPageViewForFullScreenPanelState
                   duration: Constants.defaultDuration,
                   curve: Curves.fastOutSlowIn)
               .then((value) {
-            try {
+            if (mounted) {
               if (pageController?.page == _list.value.indexOf(_item.value)) {
                 pageControllerIsAnimating.value = false;
               }
-            } catch (e) {
-              pageControllerIsAnimating.value = false;
             }
 
             // debugPrint('pageController.page == index?: ' + (pageController.page == index).toString());
@@ -1066,12 +1048,10 @@ class _ArtworkPageViewForFullScreenPanelState
                   duration: Constants.defaultShortDuration,
                   curve: Curves.decelerate)
               .then((value) {
-            try {
+            if (mounted) {
               if (pageController?.page == _list.value.indexOf(_item.value)) {
                 pageControllerIsAnimating.value = false;
               }
-            } catch (e) {
-              pageControllerIsAnimating.value = false;
             }
           });
         }

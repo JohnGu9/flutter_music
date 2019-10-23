@@ -180,7 +180,7 @@ class MediaPlayer {
       // This class always listen OnError to maintain status machine. So no need to invoke method setOnErrorListener.
       onErrorListener = fun;
 
-  static void setOnCompletionListener(Function fun()) =>
+  static void setOnCompletionListener(Function() fun) =>
       // This class always listen OnCompletion to maintain status machine. So no need to invoke method setOnCompletionListener.
       onCompletionListener = fun;
 

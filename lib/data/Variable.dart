@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_app/component/AntiBlockingWidget.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 import 'package:share_extend/share_extend.dart';
 
@@ -42,10 +43,13 @@ class Variable {
   static final CustomValueNotifier<List<SongInfo>> favouriteList =
       CustomValueNotifier(null);
 
-  // copy from AntiBlockingWidget
-  static const AntiBlockDuration = const Duration(milliseconds: 400);
   static setCurrentSong(List<SongInfo> songList, SongInfo songInfo) async {
     // Alarm: songInfo must be come from filePathToSongMap
+    assert(filePathToSongMap.containsValue(songInfo));
+    // Prevent update currentItem while pageRoute is in transition.
+    // Warning: if update currentItem while pageRoute is in transition, it will cause Hero widget break down.
+    beforeSetCurrentSong();
+    await pageRouteTransition();
     if (Variable.currentList.value != songList) {
       Variable.panelAntiBlock.value = true;
       await Future.delayed(AntiBlockDuration);
@@ -58,12 +62,8 @@ class Variable {
     }
   }
 
-//  static final CustomValueNotifier<Map<CustomValueNotifier<List>, String>>
-//      abstractListNamesMap =
-//      CustomValueNotifier<Map<CustomValueNotifier<List>, String>>(
-//          {null: ' '}); // some kind constant
-//  static final CustomValueNotifier<CustomValueNotifier<List>>
-//      currentAbstractList = CustomValueNotifier(null);
+  static Function() beforeSetCurrentSong = () {};
+  static Future<void> Function() pageRouteTransition = () async {};
 
   static final Map<String, Future<ImageProvider>> futureImages =
       Map<String, Future<ImageProvider>>(); // Get image async
@@ -233,6 +233,7 @@ class Variable {
 }
 
 bool _updating = false;
+
 void onFavorite(SongInfo songInfo) async {
   if (songInfo == null || _updating) {
     return;

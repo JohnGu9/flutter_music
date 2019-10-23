@@ -13,7 +13,6 @@ import android.util.Log;
 
 import androidx.palette.graphics.Palette;
 
-import java.io.IOException;
 import java.util.ArrayList;
 
 import io.flutter.app.FlutterActivity;
@@ -39,8 +38,7 @@ public class MainActivity extends FlutterActivity {
                     switch (methodCall.method) {
                         case "Java":
                         case "java":
-                            String text = "Java is available";
-                            Log.d(text + "\n", null);
+                            Log.d("AndroidMethodChannel", "Java is available");
                             result.success(null);
                             break;
 
@@ -87,22 +85,7 @@ public class MainActivity extends FlutterActivity {
                                         list.add(d.getRgb());
                                         list.add(v.getRgb());
                                         list.add(m.getRgb());
-                                        Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list, new MethodChannel.Result() {
-                                            @Override
-                                            public void success(Object o) {
-
-                                            }
-
-                                            @Override
-                                            public void error(String s, String s1, Object o) {
-                                                Log.d(s, s1);
-                                            }
-
-                                            @Override
-                                            public void notImplemented() {
-                                                Log.d("MMR", "notImplemented");
-                                            }
-                                        }));
+                                        Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
                                         bitmap.recycle();
                                     });
                                     thread.setPriority(Thread.MIN_PRIORITY);
@@ -110,6 +93,7 @@ public class MainActivity extends FlutterActivity {
                                 }
                             }
                             break;
+
                         case "getBasicInfo":
                             mmr = new MediaMetadataRetriever();
                             mmr.setDataSource(path);
@@ -120,6 +104,7 @@ public class MainActivity extends FlutterActivity {
                             result.success(infoList);
                             mmr.release();
                             break;
+
                         default:
                             result.notImplemented();
                     }
@@ -237,7 +222,7 @@ public class MainActivity extends FlutterActivity {
         Log.d("MainActivity", "onDestroy");
         mediaPlayerServiceBinder.release();
         unbindService(mediaPlayerServiceConnection);
-        startActivity(new Intent(MediaPlayerService.ACTION_STOPSELF));
+        startActivity(new Intent(Constants.ACTION_STOPSELF));
         super.onDestroy();
     }
 }

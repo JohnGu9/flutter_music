@@ -1,6 +1,5 @@
 import 'dart:math';
 
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
@@ -225,10 +224,13 @@ class ForegroundView extends StatelessWidget {
                 child: FadeTransition(
                   opacity: const AlwaysStoppedAnimation<double>(
                       Constants.textOpacity),
-                  child: AutoSizeText(
-                    artist.name,
-                    style: Theme.of(context).textTheme.body1,
-                    maxLines: 1,
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: Text(
+                      artist.name,
+                      style: Theme.of(context).textTheme.body1,
+                      maxLines: 2,
+                    ),
                   ),
                 ),
               ),

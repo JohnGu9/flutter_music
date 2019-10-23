@@ -12,13 +12,29 @@ import 'ui/Panel/Panel.dart';
 import 'ui/PlayList/PlayList.dart';
 
 void main() {
-  Variable.mediaPlayerLoading ??= mediaPlayerSetup();
+  Variable.mediaPlayerLoading = mediaPlayerSetup();
   runApp(const MyApp());
 }
 
 bool _shouldUpdatePreparedListener = true;
 
 mediaPlayerSetup() async {
+  /// Prevent update currentItem while pageRoute is in transition.
+  /// Warning: if update currentItem while pageRoute is in transition, it will cause [Hero] widget break down.
+  Variable.pageRouteTransition =
+      () async => await MiniPanel.pageRoute.transitionInProgress();
+
+  Variable.beforeSetCurrentSong = () {
+    if (_shouldUpdatePreparedListener) {
+      MediaPlayer.status == MediaPlayerStatus.started
+          ? MediaPlayer.setOnPreparedListener(MediaPlayer.start)
+          : MediaPlayer.removeOnPreparedListener();
+    }
+  };
+  final _currentItemChanged = () async =>
+      MediaPlayer.setDataSource(Variable.currentItem.value?.filePath);
+  Variable.currentItem.addListener(_currentItemChanged);
+
   MediaPlayer.setOnStateChangeListener((state, preState) {
     state == MediaPlayerStatus.started
         ? Variable.playButtonController
@@ -27,17 +43,7 @@ mediaPlayerSetup() async {
             .animateTo(0.0, curve: Curves.fastOutSlowIn);
   });
 
-  final _currentItemChanged = () async {
-    if (_shouldUpdatePreparedListener) {
-      MediaPlayer.status == MediaPlayerStatus.started
-          ? MediaPlayer.setOnPreparedListener(MediaPlayer.start)
-          : MediaPlayer.removeOnPreparedListener();
-    }
-    MediaPlayer.setDataSource(Variable.currentItem.value?.filePath);
-  };
-  Variable.currentItem.addListener(_currentItemChanged);
-
-  final _onCompletionListener = () {
+  final _onCompletionListener = () async {
     final state = Variable.playListSequence.getState();
     if (state == PlayListSequenceStatus.shuffle) {
       final list = Variable.currentList;
@@ -55,11 +61,13 @@ mediaPlayerSetup() async {
         MediaPlayer.setOnPreparedListener(MediaPlayer.start);
         Random _random = Random();
         int _randomNum;
+
         int _currentIndex = list.value.indexOf(item.value);
         do {
           _randomNum = _random.nextInt(list.value.length - 1);
         } while (_randomNum == _currentIndex);
-        item.value = list.value[_randomNum];
+        Variable.setCurrentSong(list.value, list.value[_randomNum]);
+        await Variable.pageRouteTransition();
         _shouldUpdatePreparedListener = true;
       }
     } else if (state == PlayListSequenceStatus.repeat_one) {
@@ -85,12 +93,14 @@ mediaPlayerSetup() async {
         if (index >= list.value.length) {
           index = 0;
         }
-        item.value = list.value[index];
+        Variable.setCurrentSong(list.value, list.value[index]);
+        await Variable.pageRouteTransition();
         _shouldUpdatePreparedListener = true;
       }
     }
   };
   MediaPlayer.setOnCompletionListener(_onCompletionListener);
+
   MediaPlayer.onPrevious = () {
     debugPrint('onPrevious');
     final list = Variable.currentList;

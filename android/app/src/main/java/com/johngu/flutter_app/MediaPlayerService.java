@@ -44,7 +44,6 @@ public final class MediaPlayerService extends IntentService
     static public final String ACTION_OnPause = "com.johngu.onPause";
     static public final String ACTION_OnPrevious = "com.johngu.onPrevious";
     static public final String ACTION_OnNext = "com.johngu.onNext";
-    static public final String ACTION_STOPSELF = "com.johngu.STOPSELF";
 
     enum State {Idle, Initialized, Preparing, Prepared}
 
@@ -133,7 +132,6 @@ public final class MediaPlayerService extends IntentService
         mediaPlayerServiceBinder = new MediaPlayerServiceBinder();
         audioFocusRequestHandler = new Handler();
         volume = -1;
-
     }
 
     @Override
@@ -141,16 +139,9 @@ public final class MediaPlayerService extends IntentService
         super.onCreate();
         MediaPlayerInit();
         NotificationInit();
+        AudioFocusInit();
         Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "idle");
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
-            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                    .setAudioAttributes(audioAttributes)
-                    .setAcceptsDelayedFocusGain(true)
-                    .setWillPauseWhenDucked(true)
-                    .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
-                    .build();
-        }
     }
 
     @Override
@@ -175,6 +166,16 @@ public final class MediaPlayerService extends IntentService
     @Override
     public final MediaPlayerServiceBinder onBind(Intent intent) {
         return mediaPlayerServiceBinder;
+    }
+
+    @TargetApi(Build.VERSION_CODES.O)
+    private void AudioFocusInit(){
+        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(audioAttributes)
+                .setAcceptsDelayedFocusGain(true)
+                .setWillPauseWhenDucked(true)
+                .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
+                .build();
     }
 
     private int audioFocusRequest() {
@@ -445,7 +446,7 @@ public final class MediaPlayerService extends IntentService
             case ACTION_OnNext:
                 onNext();
                 break;
-            case ACTION_STOPSELF:
+            case Constants.ACTION_STOPSELF:
                 stopSelf();
             default:
         }

@@ -198,6 +198,14 @@ class CustomCupertinoPageRoute<T> extends PageRoute<T> {
     return nextRoute is CustomCupertinoPageRoute && !nextRoute.fullscreenDialog;
   }
 
+  Future transitionInProgress() async {
+    while (controller != null &&
+        controller.value != controller.upperBound &&
+        controller.value != controller.lowerBound) {
+      await Future.delayed(transitionDuration);
+    }
+  }
+
   /// True if an iOS-style back swipe pop gesture is currently underway for [route].
   ///
   /// This just check the route's [NavigatorState.userGestureInProgress].
@@ -208,9 +216,6 @@ class CustomCupertinoPageRoute<T> extends PageRoute<T> {
   ///    would be allowed.
   static bool isPopGestureInProgress(PageRoute<dynamic> route) =>
       route.navigator.userGestureInProgress;
-
-  static bool isTransitionInProgress(PageRoute<dynamic> route) =>
-      (route.controller.value != 0.0 && route.controller.value != 1.0);
 
   /// True if an iOS-style back swipe pop gesture is currently underway for this route.
   ///
