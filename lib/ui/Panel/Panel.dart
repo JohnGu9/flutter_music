@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_app/plugin/MediaMetadataRetriever.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 
 import '../../component/AntiBlockingWidget.dart';
@@ -260,7 +261,7 @@ class _ArtworkViewForMiniPanelState extends State<ArtworkViewForMiniPanel> {
       pageController = PageController();
     }
 
-    syncItem ??= () {
+    syncItem ??= () async {
       if (_item?.value == null || !_list.value.contains(_item.value)) {
         return;
       }
@@ -304,9 +305,9 @@ class _ArtworkViewForMiniPanelState extends State<ArtworkViewForMiniPanel> {
       }
     };
 
-    onPageChange ??= (int index) {
+    onPageChange ??= (int index) async {
       if (!pageControllerIsAnimating.value) {
-        _item.value = _list.value[index];
+        Variable.setCurrentSong(_list.value, _list.value[index]);
       }
     };
 
@@ -817,22 +818,23 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
 
   _onInitState() {
     songInfo = _valueListenable.value;
-    if (songInfo != null) {
-      ImageSwitcherWidget.imageNotifier.value =
-          Variable.filePathToImageMap[songInfo.filePath];
-    }
+//    if (songInfo != null) {
+//      ImageSwitcherWidget.imageNotifier.value =
+//          Variable.filePathToImageMap[songInfo.filePath];
+//    }
   }
 
-  _loadImage() => setState(() {
+  _onValueChanged() => setState(() {
         songInfo = _valueListenable.value;
-        _loadImageAsync();
+        MediaMetadataRetriever.filePathToPaletteMap[songInfo?.filePath] ??=
+            CustomValueNotifier(null);
       });
 
   void _loadImageAsync() async {
-    await Future.delayed(const Duration(milliseconds: 150));
+    await Future.delayed(const Duration(milliseconds: 100));
     await Future.wait([
       Variable.getArtworkAsync(path: songInfo?.filePath),
-      Future.delayed(const Duration(milliseconds: 50)),
+      Future.delayed(const Duration(milliseconds: 100)),
     ]);
     await SchedulerBinding.instance.endOfFrame;
     ImageSwitcherWidget.imageNotifier.value = songInfo == null
@@ -845,14 +847,14 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
     // TODO: implement initState
     super.initState();
     _onInitState();
-    _valueListenable.addListener(_loadImage);
+    _valueListenable.addListener(_onValueChanged);
   }
 
   @override
   void dispose() {
     // TODO: implement dispose
     super.dispose();
-    _valueListenable.removeListener(_loadImage);
+    _valueListenable.removeListener(_onValueChanged);
   }
 
   static const borderRadius = const BorderRadius.only(
@@ -870,15 +872,78 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
         color: Theme.of(context).backgroundColor,
         clipBehavior: Clip.antiAlias,
         borderRadius: borderRadius,
-        child: Stack(
-          fit: StackFit.expand,
-          children: const <Widget>[
-            const ImageSwitcherWidget(),
-            const BlurWidget(),
-          ],
+        child: ColorfulBackground(
+          colorsListenable: songInfo == null
+              ? CustomValueNotifier<List<Color>>(null)
+              : MediaMetadataRetriever.filePathToPaletteMap[songInfo.filePath],
         ),
+//        child: Stack(
+//          fit: StackFit.expand,
+//          children: const <Widget>[
+//            const ImageSwitcherWidget(),
+//            const BlurWidget(),
+//          ],
+//        ),
       ),
     );
+  }
+}
+
+class ColorfulBackground extends StatefulWidget {
+  const ColorfulBackground({Key key, this.colorsListenable}) : super(key: key);
+  final ValueListenable colorsListenable;
+
+  @override
+  _ColorfulBackgroundState createState() => _ColorfulBackgroundState();
+}
+
+class _ColorfulBackgroundState extends State<ColorfulBackground> {
+  List<Color> value;
+
+  @override
+  void initState() {
+    super.initState();
+    value = widget.colorsListenable.value;
+    widget.colorsListenable.addListener(_valueChanged);
+  }
+
+  @override
+  void didUpdateWidget(ColorfulBackground oldWidget) {
+    if (oldWidget.colorsListenable != widget.colorsListenable) {
+      oldWidget.colorsListenable.removeListener(_valueChanged);
+      value = widget.colorsListenable.value;
+      widget.colorsListenable.addListener(_valueChanged);
+    }
+    super.didUpdateWidget(oldWidget);
+  }
+
+  @override
+  void dispose() {
+    widget.colorsListenable.removeListener(_valueChanged);
+    super.dispose();
+  }
+
+  void _valueChanged() async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (mounted) {
+      setState(() => value = widget.colorsListenable.value);
+    }
+  }
+
+  static Widget builder(BuildContext context, List<Color> colors) {
+    return AnimatedContainer(
+      duration: Constants.defaultDuration,
+      decoration: BoxDecoration(
+        borderRadius: _FullScreenPanelBackgroundState.borderRadius,
+        color: colors != null ? colors[0].withOpacity(0.3) : Colors.transparent,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return builder(context, value);
   }
 }
 
@@ -1060,7 +1125,7 @@ class _ArtworkPageViewForFullScreenPanelState
 
     onPageChange ??= (int index) {
       if (!pageControllerIsAnimating.value) {
-        _item.value = _list.value[index];
+        Variable.setCurrentSong(_list.value, _list.value[index]);
       }
     };
 

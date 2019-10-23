@@ -66,8 +66,7 @@ mediaPlayerSetup() async {
         do {
           _randomNum = _random.nextInt(list.value.length - 1);
         } while (_randomNum == _currentIndex);
-        Variable.setCurrentSong(list.value, list.value[_randomNum]);
-        await Variable.pageRouteTransition();
+        await Variable.setCurrentSong(list.value, list.value[_randomNum]);
         _shouldUpdatePreparedListener = true;
       }
     } else if (state == PlayListSequenceStatus.repeat_one) {
@@ -93,8 +92,7 @@ mediaPlayerSetup() async {
         if (index >= list.value.length) {
           index = 0;
         }
-        Variable.setCurrentSong(list.value, list.value[index]);
-        await Variable.pageRouteTransition();
+        await Variable.setCurrentSong(list.value, list.value[index]);
         _shouldUpdatePreparedListener = true;
       }
     }
@@ -116,7 +114,7 @@ mediaPlayerSetup() async {
     if (index < 0) {
       index = list.value.length - 1;
     }
-    item.value = list.value[index];
+    Variable.setCurrentSong(list.value, list.value[index]);
   };
   MediaPlayer.onNext = () {
     final list = Variable.currentList;
@@ -131,7 +129,7 @@ mediaPlayerSetup() async {
     if (index >= list.value.length) {
       index = 0;
     }
-    item.value = list.value[index];
+    Variable.setCurrentSong(list.value, list.value[index]);
   };
   MediaPlayer.getSongInfo = () => [
         Variable.currentItem.value.title,

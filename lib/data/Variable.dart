@@ -77,13 +77,8 @@ class Variable {
     }
     // If image has no cache yet, instance a future to cache the image data
     if (!futureImages.containsKey(path)) {
-      futureImages[path] = Future<ImageProvider>(() async {
-        Future<ImageProvider> res =
-            MediaMetadataRetriever.getEmbeddedPicture(path);
-        // cache image data
-        filePathToImageMap[path] = await res;
-        return filePathToImageMap[path];
-      });
+      futureImages[path] = MediaMetadataRetriever.getEmbeddedPicture(path)
+          .then((value) => filePathToImageMap[path] = value);
     }
     return Variable.futureImages[path];
   }
