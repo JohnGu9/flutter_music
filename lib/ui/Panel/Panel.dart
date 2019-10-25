@@ -816,45 +816,27 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
   SongInfo songInfo;
   final _valueListenable = Variable.currentItem;
 
-  _onInitState() {
+  _updateValue() {
     songInfo = _valueListenable.value;
-//    if (songInfo != null) {
-//      ImageSwitcherWidget.imageNotifier.value =
-//          Variable.filePathToImageMap[songInfo.filePath];
-//    }
+    MediaMetadataRetriever.filePathToPaletteMap[songInfo?.filePath] ??=
+        CustomValueNotifier(null);
   }
 
-  _onValueChanged() => setState(() {
-        songInfo = _valueListenable.value;
-        MediaMetadataRetriever.filePathToPaletteMap[songInfo?.filePath] ??=
-            CustomValueNotifier(null);
-      });
-
-  void _loadImageAsync() async {
-    await Future.delayed(const Duration(milliseconds: 100));
-    await Future.wait([
-      Variable.getArtworkAsync(path: songInfo?.filePath),
-      Future.delayed(const Duration(milliseconds: 100)),
-    ]);
-    await SchedulerBinding.instance.endOfFrame;
-    ImageSwitcherWidget.imageNotifier.value = songInfo == null
-        ? null
-        : Variable.filePathToImageMap[songInfo.filePath];
-  }
+  _onValueChanged() => setState(() => _updateValue());
 
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    _onInitState();
+    _updateValue();
     _valueListenable.addListener(_onValueChanged);
   }
 
   @override
   void dispose() {
     // TODO: implement dispose
-    super.dispose();
     _valueListenable.removeListener(_onValueChanged);
+    super.dispose();
   }
 
   static const borderRadius = const BorderRadius.only(
@@ -877,13 +859,6 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
               ? CustomValueNotifier<List<Color>>(null)
               : MediaMetadataRetriever.filePathToPaletteMap[songInfo.filePath],
         ),
-//        child: Stack(
-//          fit: StackFit.expand,
-//          children: const <Widget>[
-//            const ImageSwitcherWidget(),
-//            const BlurWidget(),
-//          ],
-//        ),
       ),
     );
   }
@@ -930,12 +905,50 @@ class _ColorfulBackgroundState extends State<ColorfulBackground> {
     }
   }
 
+  static const opacity = 0.3;
+
   static Widget builder(BuildContext context, List<Color> colors) {
-    return AnimatedContainer(
-      duration: Constants.defaultDuration,
-      decoration: BoxDecoration(
-        borderRadius: _FullScreenPanelBackgroundState.borderRadius,
-        color: colors != null ? colors[0].withOpacity(0.3) : Colors.transparent,
+    return AnimatedSwitcher(
+      duration: Constants.defaultLongDuration,
+      switchInCurve: Curves.easeInOutSine,
+      switchOutCurve: Curves.easeInOutSine,
+      child: Container(
+        key: ValueKey(colors),
+        decoration: colors == null
+            ? BoxDecoration(
+                borderRadius: _FullScreenPanelBackgroundState.borderRadius,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Theme.of(context).backgroundColor,
+                    Theme.of(context).primaryColor,
+                  ],
+                  stops: const [0.0, 1.0],
+                ))
+            : BoxDecoration(
+                borderRadius: _FullScreenPanelBackgroundState.borderRadius,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Theme.of(context).brightness == Brightness.light
+                        ? (MediaMetadataRetriever.getLightColor(colors))
+                            .withOpacity(opacity)
+                        : (MediaMetadataRetriever.getDarkColor(colors))
+                            .withOpacity(opacity),
+                    colors[MediaMetadataRetriever.DominantColor]
+                        .withOpacity(opacity),
+                    colors[MediaMetadataRetriever.DominantColor]
+                        .withOpacity(opacity),
+                    Theme.of(context).brightness == Brightness.light
+                        ? (MediaMetadataRetriever.getDarkColor(colors))
+                            .withOpacity(opacity)
+                        : (MediaMetadataRetriever.getLightColor(colors))
+                            .withOpacity(opacity),
+                  ],
+                  stops: const [0.0, 0.2, 0.7, 1.0],
+                )),
       ),
     );
   }

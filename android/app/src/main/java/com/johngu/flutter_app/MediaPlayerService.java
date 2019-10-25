@@ -12,12 +12,17 @@ import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.media.MediaMetadata;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.PowerManager;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaControllerCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
@@ -45,10 +50,19 @@ public final class MediaPlayerService extends IntentService
     static public final String ACTION_OnPrevious = "com.johngu.onPrevious";
     static public final String ACTION_OnNext = "com.johngu.onNext";
 
-    enum State {Idle, Initialized, Preparing, Prepared}
+    static private final int PlaybackStateCompatIdle = PlaybackStateCompat.STATE_NONE;
+    static private final int PlaybackStateCompatInit = PlaybackStateCompat.STATE_CONNECTING;
+    static private final int PlaybackStateCompatPreparing = PlaybackStateCompat.STATE_BUFFERING;
+    static private final int PlaybackStateCompatPrepared = PlaybackStateCompat.STATE_PAUSED;
+    static private final float playbackSpeed = 1.0f;
 
     static private MediaPlayer mediaPlayer;
-    static private volatile State state;
+    static private MediaControllerCompat mediaController;
+    static private MediaSessionCompat mediaSession;
+    static private MediaSessionCompat.Callback mediaSessionCallBack;
+    static private PlaybackStateCompat.Builder playbackStateBuilder;
+    static private volatile PlaybackStateCompat playbackState;
+    static private MediaMetadataCompat.Builder mediaMetadata;
     static private AudioManager audioManager;
     static private NotificationManager notificationManager;
     static private AudioAttributes audioAttributes;
@@ -93,11 +107,20 @@ public final class MediaPlayerService extends IntentService
             notificationActingBuilder.setContentText(artist);
             notificationActingBuilder.setSubText(album);
 
+            mediaMetadata = new MediaMetadataCompat.Builder();
+            mediaMetadata.putString(MediaMetadata.METADATA_KEY_TITLE, title);
+            mediaMetadata.putString(MediaMetadata.METADATA_KEY_ARTIST, artist);
+            mediaMetadata.putString(MediaMetadata.METADATA_KEY_ALBUM, album);
+            mediaMetadata.putLong(MediaMetadata.METADATA_KEY_DURATION, Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)));
+            mediaSession.setMetadata(mediaMetadata.build());
+
             byte[] artwork = mmr.getEmbeddedPicture();
             if (artwork != null) {
                 Bitmap bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
                 notificationPendingBuilder.setLargeIcon(bitmap);
                 notificationActingBuilder.setLargeIcon(bitmap);
+//                notificationPendingBuilder.setColor(Color.argb(255, 0, 0, 127));
+//                notificationActingBuilder.setColor(Color.argb(255, 0, 0, 127));
                 notificationPending = notificationPendingBuilder.build();
                 notificationActing = notificationActingBuilder.build();
                 bitmap.recycle();
@@ -140,8 +163,6 @@ public final class MediaPlayerService extends IntentService
         MediaPlayerInit();
         NotificationInit();
         AudioFocusInit();
-        Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "idle");
-        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
     }
 
     @Override
@@ -150,6 +171,7 @@ public final class MediaPlayerService extends IntentService
         notificationManager.cancel(MediaPlayerNotifyID);
         mediaPlayer.release();
         mediaPlayer = null;
+        mediaSession.release();
         Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "end");
         super.onDestroy();
     }
@@ -168,14 +190,16 @@ public final class MediaPlayerService extends IntentService
         return mediaPlayerServiceBinder;
     }
 
-    @TargetApi(Build.VERSION_CODES.O)
-    private void AudioFocusInit(){
-        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(audioAttributes)
-                .setAcceptsDelayedFocusGain(true)
-                .setWillPauseWhenDucked(true)
-                .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
-                .build();
+    private void AudioFocusInit() {
+        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(audioAttributes)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setWillPauseWhenDucked(true)
+                    .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
+                    .build();
+        }
     }
 
     private int audioFocusRequest() {
@@ -202,9 +226,55 @@ public final class MediaPlayerService extends IntentService
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setLegacyStreamType(AudioManager.STREAM_MUSIC).build();
         mediaPlayer.setAudioAttributes(audioAttributes);
+        Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "idle");
     }
 
     private void NotificationInit() {
+
+        mediaSession = new MediaSessionCompat(this, "MediaPlayer");
+        mediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
+        mediaController = new MediaControllerCompat(this, mediaSession);
+
+        mediaSessionCallBack = new MediaSessionCompat.Callback() {
+            @Override
+            public void onPlay() {
+                super.onPlay();
+            }
+
+            @Override
+            public void onPause() {
+                super.onPause();
+            }
+
+            @Override
+            public void onSkipToPrevious() {
+                super.onSkipToPrevious();
+            }
+
+            @Override
+            public void onSkipToNext() {
+                super.onSkipToNext();
+            }
+
+            @TargetApi(Build.VERSION_CODES.N)
+            @Override
+            public void onSeekTo(long pos) {
+                super.onSeekTo(pos);
+                mediaPlayer.seekTo(Math.toIntExact(pos));
+            }
+
+        };
+        mediaSession.setCallback(mediaSessionCallBack);
+
+        playbackStateBuilder = new PlaybackStateCompat.Builder();
+        playbackStateBuilder
+                .setState(PlaybackStateCompat.STATE_NONE, 0, playbackSpeed)
+                .setActions(PlaybackStateCompat.ACTION_SEEK_TO);
+        playbackState = playbackStateBuilder.build();
+
+        mediaSession.setPlaybackState(playbackState);
+        mediaSession.setActive(true);
+
         // Create the NotificationChannel, but only on API 26+ because
         // the NotificationChannel class is new and not in the support library
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -227,7 +297,7 @@ public final class MediaPlayerService extends IntentService
                 new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_UPDATE_CURRENT);
 
-        MediaStyle mediaStyle = new MediaStyle().setShowActionsInCompactView(1);
+        MediaStyle mediaStyle = new MediaStyle().setShowActionsInCompactView(1).setMediaSession(mediaSession.getSessionToken());
         notificationPendingBuilder = new NotificationCompat.Builder(this, MediaPlayerNotificationChannel_ID)
                 .setSmallIcon(R.drawable.ic_stat_name)
                 .setContentIntent(contentIntent)
@@ -235,6 +305,7 @@ public final class MediaPlayerService extends IntentService
                 .setSound(null)
                 .setOngoing(false)
                 .setStyle(mediaStyle)
+                .setPriority(Notification.PRIORITY_DEFAULT)
                 .addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious))
                 .addAction(generateAction(R.drawable.ic_play, "Play", MediaPlayerService.ACTION_OnPlay))
                 .addAction(generateAction(R.drawable.ic_next, "Next", MediaPlayerService.ACTION_OnNext));
@@ -246,6 +317,7 @@ public final class MediaPlayerService extends IntentService
                 .setSound(null)
                 .setOngoing(true)
                 .setStyle(mediaStyle)
+                .setPriority(Notification.PRIORITY_DEFAULT)
                 .addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious))
                 .addAction(generateAction(R.drawable.ic_pause, "Pause", MediaPlayerService.ACTION_OnPause))
                 .addAction(generateAction(R.drawable.ic_next, "Next", MediaPlayerService.ACTION_OnNext));
@@ -258,6 +330,12 @@ public final class MediaPlayerService extends IntentService
         intent.setAction(intentAction);
         PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 1, intent, PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Action.Builder(icon, title, pendingIntent).build();
+    }
+
+    private void updatePlaybackState(int state, int position) {
+        playbackStateBuilder.setState(state, position, playbackSpeed);
+        playbackState = playbackStateBuilder.build();
+        mediaSession.setPlaybackState(playbackState);
     }
 
     public class MediaPlayerServiceBinder extends Binder {
@@ -283,12 +361,14 @@ public final class MediaPlayerService extends IntentService
         public final void stop() {
             mediaPlayer.stop();
             notificationManager.cancel(MediaPlayerNotifyID);
+            updatePlaybackState(PlaybackStateCompat.STATE_NONE, 0);
             Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "stopped");
         }
 
         public final void reset() {
             mediaPlayer.reset();
             notificationManager.cancel(MediaPlayerNotifyID);
+            updatePlaybackState(PlaybackStateCompat.STATE_NONE, 0);
             Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "idle");
         }
 
@@ -296,6 +376,7 @@ public final class MediaPlayerService extends IntentService
             notificationManager.cancel(MediaPlayerNotifyID);
             mediaPlayer.release();
             mediaPlayer = null;
+            updatePlaybackState(PlaybackStateCompat.STATE_NONE, 0);
             Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "end");
         }
 
@@ -374,30 +455,30 @@ public final class MediaPlayerService extends IntentService
         @Override
         public void run() {
             synchronized (this) {
-                if (state != State.Idle && path == currentDataSource) {
+                if (playbackState.getState() != PlaybackStateCompatIdle && path == currentDataSource) {
                     mediaPlayer.reset();
-                    state = State.Idle;
+                    updatePlaybackState(PlaybackStateCompatIdle, 0);
                 } else if (path != currentDataSource) {
                     return;
                 }
             }
 
             synchronized (this) {
-                if (state == State.Idle && path == currentDataSource) {
+                if (playbackState.getState() == PlaybackStateCompatIdle && path == currentDataSource) {
                     try {
                         mediaPlayer.setDataSource(currentDataSource);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
-                    state = State.Initialized;
+                    updatePlaybackState(PlaybackStateCompatInit, 0);
                 } else {
                     return;
                 }
             }
 
             synchronized (this) {
-                if (state == State.Initialized && path == currentDataSource) {
-                    state = State.Preparing;
+                if (playbackState.getState() == PlaybackStateCompatInit && path == currentDataSource) {
+                    updatePlaybackState(PlaybackStateCompatPreparing, 0);
                     mediaPlayer.prepareAsync();
                 }
             }
@@ -405,11 +486,12 @@ public final class MediaPlayerService extends IntentService
     }
 
     private void onPlay() {
-        if (state == State.Prepared) {
+        if (playbackState.getState() == PlaybackStateCompatPrepared) {
             int res = audioFocusRequest();
             if (res != AudioManager.AUDIOFOCUS_REQUEST_FAILED) {
                 mediaPlayer.start();
                 notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
             }
             Constants.mainThreadHandler.post(onPlayRunnable);
         }
@@ -417,6 +499,7 @@ public final class MediaPlayerService extends IntentService
 
     private void onPause() {
         mediaPlayer.pause();
+        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
         Constants.mainThreadHandler.post(onPauseRunnable);
         notificationManager.notify(MediaPlayerNotifyID, notificationPending);
     }
@@ -454,7 +537,7 @@ public final class MediaPlayerService extends IntentService
 
     @Override
     public final void onPrepared(MediaPlayer mediaPlayer) {
-        state = State.Prepared;
+        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onPreparedListener",
                 // onPrepared will return duration
@@ -479,6 +562,7 @@ public final class MediaPlayerService extends IntentService
 
     @Override
     public final void onCompletion(MediaPlayer mediaPlayer) {
+        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onCompletionListener",
                 null,
@@ -502,6 +586,7 @@ public final class MediaPlayerService extends IntentService
 
     @Override
     public final boolean onError(MediaPlayer mediaPlayer, int what, int extra) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR, 0);
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onErrorListener",
                 new int[]{what, extra},
@@ -526,6 +611,7 @@ public final class MediaPlayerService extends IntentService
 
     @Override
     public final void onSeekComplete(MediaPlayer mediaPlayer) {
+        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onSeekCompleteListener",
                 mediaPlayer.getCurrentPosition(),
@@ -579,10 +665,10 @@ public final class MediaPlayerService extends IntentService
             case AudioManager.AUDIOFOCUS_LOSS:
                 if (mediaPlayer != null && mediaPlayer.isPlaying()) {
                     isPlayingBeforeLossFocus = true;
+                    onPause();
                 } else {
                     isPlayingBeforeLossFocus = false;
                 }
-                onPause();
                 break;
 
             case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
@@ -596,7 +682,7 @@ public final class MediaPlayerService extends IntentService
                 if (volume >= 0) {
                     mediaPlayer.setVolume(volume, volume);
                 }
-                if (!mediaPlayer.isPlaying() && isPlayingBeforeLossFocus) {
+                if (mediaPlayer != null && !mediaPlayer.isPlaying() && isPlayingBeforeLossFocus) {
                     onPlay();
                 }
                 break;

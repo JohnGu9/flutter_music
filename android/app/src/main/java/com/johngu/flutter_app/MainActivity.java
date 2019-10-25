@@ -77,14 +77,16 @@ public class MainActivity extends FlutterActivity {
                                     Bitmap bitmap = BitmapFactory.decodeByteArray(res, 0, res.length);
                                     Thread thread = new Thread(() -> {
                                         Palette palette = new Palette.Builder(bitmap).generate();
-                                        Palette.Swatch d = palette.getDominantSwatch();
-                                        Palette.Swatch v = palette.getVibrantSwatch();
-                                        Palette.Swatch m = palette.getMutedSwatch();
-                                        ArrayList list = new ArrayList<Object>();
-                                        list.add(path);
-                                        list.add(d.getRgb());
-                                        list.add(v.getRgb());
-                                        list.add(m.getRgb());
+                                        ArrayList list = new ArrayList<Object>() {{
+                                            add(path);
+                                            add(palette.getDominantSwatch() != null ? palette.getDominantSwatch().getRgb() : null);
+                                            add(palette.getVibrantSwatch() != null ? palette.getVibrantSwatch().getRgb() : null);
+                                            add(palette.getMutedSwatch() != null ? palette.getMutedSwatch().getRgb() : null);
+                                            add(palette.getLightVibrantSwatch() == null ? null : palette.getLightVibrantSwatch().getRgb());
+                                            add(palette.getLightMutedSwatch() == null ? null : palette.getLightMutedSwatch().getRgb());
+                                            add(palette.getDarkVibrantSwatch() == null ? null : palette.getDarkVibrantSwatch().getRgb());
+                                            add(palette.getDarkMutedSwatch() == null ? null : palette.getDarkMutedSwatch().getRgb());
+                                        }};
                                         Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
                                         bitmap.recycle();
                                     });
