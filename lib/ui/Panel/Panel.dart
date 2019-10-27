@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_app/plugin/MediaMetadataRetriever.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 
@@ -84,6 +85,7 @@ class _ArtworkState extends State<Artwork> {
       child: image == null
           ? InkWell(
               onTap: widget.onTap,
+              onLongPress: () => Feedback.forLongPress(context),
               child: const FittedBox(
                 fit: BoxFit.contain,
                 child: const ScaleTransition(
@@ -99,6 +101,7 @@ class _ArtworkState extends State<Artwork> {
               width: _kImageWidth,
               child: InkWell(
                 onTap: widget.onTap,
+                onLongPress: () => Feedback.forLongPress(context),
               ),
             ),
     );
@@ -116,15 +119,12 @@ class HeroTitle extends StatelessWidget {
       tag: songInfo.hashCode.toString() + 'title',
       transitionOnUserGestures: true,
       flightShuttleBuilder: Constants.fromHeroPriorityFlightShuttleBuilder,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 10),
-        child: FittedBox(
-          fit: BoxFit.contain,
-          child: Text(
-            songInfo == null ? Constants.defaultMusicTitle : songInfo.title,
-            style: Theme.of(context).textTheme.title,
-            maxLines: 1,
-          ),
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Text(
+          songInfo == null ? Constants.defaultMusicTitle : songInfo.title,
+          style: Theme.of(context).textTheme.title,
+          maxLines: 1,
         ),
       ),
     );
@@ -141,19 +141,16 @@ class HeroArtist extends StatelessWidget {
     return Hero(
       tag: songInfo.hashCode.toString() + 'artist',
       transitionOnUserGestures: true,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 10),
-        child: FittedBox(
-          fit: BoxFit.contain,
-          child: Text(
-            songInfo == null
-                ? Constants.defaultMusicArtist
-                : (songInfo.artist == '<unknown>'
-                    ? songInfo.album
-                    : songInfo.artist),
-            style: Theme.of(context).textTheme.body2,
-            maxLines: 1,
-          ),
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Text(
+          songInfo == null
+              ? Constants.defaultMusicArtist
+              : (songInfo.artist == '<unknown>'
+                  ? songInfo.album
+                  : songInfo.artist),
+          style: Theme.of(context).textTheme.body2,
+          maxLines: 1,
         ),
       ),
     );
@@ -171,10 +168,10 @@ class MiniPanel extends StatelessWidget {
 
   static Future _generalPushRoute(BuildContext context) async {
     await SchedulerBinding.instance.endOfFrame;
-    return await Future.microtask(
-      () {
+    await Future.microtask(
+      () async {
         pageRoute = CustomCupertinoPageRoute(builder: _routeBuilder);
-        Navigator.push(context, pageRoute);
+        await Navigator.push(context, pageRoute);
       },
     );
   }
@@ -442,14 +439,17 @@ class MiniPanelPageViewItemContent extends StatelessWidget {
             ),
           ),
         ),
+        const VerticalDivider(
+          width: 10.0,
+        ),
         Expanded(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               const SizedBox(height: 20, width: 50),
-              const SizedBox(height: 20, child: HeroTitle()),
-              const SizedBox(height: 15, child: HeroArtist()),
+              const SizedBox(height: 20, child: const HeroTitle()),
+              const SizedBox(height: 15, child: const HeroArtist()),
               Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
@@ -488,12 +488,7 @@ class MiniPanelPageViewItemContent extends StatelessWidget {
           child: SizedBox(
             height: 65,
             width: 65,
-            child: Hero(
-                tag:
-                    SongInfoInherited.of(context).songInfo.hashCode.toString() +
-                        'play',
-                transitionOnUserGestures: true,
-                child: const HeroPlayButton()),
+            child: const HeroPlayButton(),
           ),
         ),
         SizedBox(
@@ -547,10 +542,6 @@ class _ForePanelState extends State<ForePanel>
   AnimationController _controller;
   Animation _offsetAnimation;
 
-  Widget _builder(BuildContext context, Offset offset, Widget child) {
-    return Transform.translate(offset: offset, child: child);
-  }
-
   _onVerticalDragStart(DragStartDetails details) {
     _controller.stop();
     _startOffset = offsetController.value;
@@ -579,7 +570,9 @@ class _ForePanelState extends State<ForePanel>
     if (dy.abs() > 100) {
       dy < 0 ? _open(dy.abs() / 100) : _close(dy.abs() / 100);
     } else if (offsetController.value != Offset.zero) {
-      offsetController.value.dy < _midHide ? _open(1) : _close(1);
+      offsetController.value.dy < _midHide
+          ? _open(details.velocity.pixelsPerSecond.dy)
+          : _close(details.velocity.pixelsPerSecond.dy);
     }
   }
 
@@ -600,6 +593,9 @@ class _ForePanelState extends State<ForePanel>
     _controller.reset();
     _controller.fling(velocity: velocity);
   }
+
+  Widget _builder(BuildContext context, Offset offset, Widget child) =>
+      Transform.translate(offset: offset, child: child);
 
   @override
   void initState() {
@@ -622,14 +618,14 @@ class _ForePanelState extends State<ForePanel>
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onVerticalDragStart: _onVerticalDragStart,
-      onVerticalDragUpdate: _onVerticalDragUpdate,
-      onVerticalDragEnd: _onVerticalDragEnd,
-      child: ValueListenableBuilder(
-        valueListenable: offsetController,
-        builder: _builder,
+    return ValueListenableBuilder(
+      valueListenable: offsetController,
+      builder: _builder,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onVerticalDragStart: _onVerticalDragStart,
+        onVerticalDragUpdate: _onVerticalDragUpdate,
+        onVerticalDragEnd: _onVerticalDragEnd,
         child: const Align(
           alignment: Alignment.topCenter,
           child: const ForePanelContent(),
@@ -807,6 +803,9 @@ class HidePanelExtendContent extends StatelessWidget {
 class FullScreenPanelBackground extends StatefulWidget {
   const FullScreenPanelBackground({Key key}) : super(key: key);
 
+  static const borderRadius = const BorderRadius.only(
+      bottomLeft: Radius.circular(15), bottomRight: Radius.circular(15));
+
   @override
   _FullScreenPanelBackgroundState createState() =>
       _FullScreenPanelBackgroundState();
@@ -839,8 +838,7 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
     super.dispose();
   }
 
-  static const borderRadius = const BorderRadius.only(
-      bottomLeft: Radius.circular(15), bottomRight: Radius.circular(15));
+  static final invalidPalette = CustomValueNotifier<List<Color>>(null);
 
   @override
   Widget build(BuildContext context) {
@@ -853,10 +851,10 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
         elevation: 4.0,
         color: Theme.of(context).backgroundColor,
         clipBehavior: Clip.antiAlias,
-        borderRadius: borderRadius,
+        borderRadius: FullScreenPanelBackground.borderRadius,
         child: ColorfulBackground(
           colorsListenable: songInfo == null
-              ? CustomValueNotifier<List<Color>>(null)
+              ? invalidPalette
               : MediaMetadataRetriever.filePathToPaletteMap[songInfo.filePath],
         ),
       ),
@@ -916,7 +914,7 @@ class _ColorfulBackgroundState extends State<ColorfulBackground> {
         key: ValueKey(colors),
         decoration: colors == null
             ? BoxDecoration(
-                borderRadius: _FullScreenPanelBackgroundState.borderRadius,
+                borderRadius: FullScreenPanelBackground.borderRadius,
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -927,7 +925,7 @@ class _ColorfulBackgroundState extends State<ColorfulBackground> {
                   stops: const [0.0, 1.0],
                 ))
             : BoxDecoration(
-                borderRadius: _FullScreenPanelBackgroundState.borderRadius,
+                borderRadius: FullScreenPanelBackground.borderRadius,
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -1002,7 +1000,7 @@ class BlurWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     // TODO: implement build
     return ClipRRect(
-      borderRadius: _FullScreenPanelBackgroundState.borderRadius,
+      borderRadius: FullScreenPanelBackground.borderRadius,
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
         child: const Material(
@@ -1244,8 +1242,14 @@ class _FullScreenPanelPageViewItemState
                 child: _artwork,
               ),
             ),
-            const SizedBox(height: 30, child: const HeroTitle()),
-            const SizedBox(height: 20, child: const HeroArtist()),
+            const Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: const SizedBox(height: 30, child: const HeroTitle()),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: const SizedBox(height: 20, child: const HeroArtist()),
+            ),
           ],
         ),
       ),
@@ -1302,31 +1306,10 @@ class FullScreenPanelControllerLayout extends StatelessWidget {
                     const VerticalDivider(
                       width: 5,
                     ),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 70),
-                      child: Hero(
-                          tag: songInfo.hashCode.toString() + 'skip_previous',
-                          transitionOnUserGestures: true,
-                          flightShuttleBuilder:
-                              Constants.targetPriorityFlightShuttleBuilder,
-                          child: const SkipPreviousButton()),
-                    ),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 100),
-                      child: Hero(
-                          tag: songInfo.hashCode.toString() + 'play',
-                          transitionOnUserGestures: true,
-                          child: const HeroPlayButton()),
-                    ),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 70),
-                      child: Hero(
-                          tag: songInfo.hashCode.toString() + 'skip_next',
-                          transitionOnUserGestures: true,
-                          flightShuttleBuilder:
-                              Constants.targetPriorityFlightShuttleBuilder,
-                          child: const SkipNextButton()),
-                    ),
+                    const SizedBox(
+                        width: 70, child: const SkipPreviousButton()),
+                    const SizedBox(width: 100, child: const HeroPlayButton()),
+                    const SizedBox(width: 70, child: const SkipNextButton()),
                     const VerticalDivider(
                       width: 5,
                     ),
@@ -1549,46 +1532,25 @@ class SkipPreviousButton extends StatelessWidget {
   Widget build(BuildContext context) {
     // TODO: implement build
 
-    return const Material(
-      elevation: 0.0,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: const InkWell(
-        onTap: MediaPlayer.onSkipPrevious,
-        child: const Padding(
-          padding: const EdgeInsets.all(20),
-          child: const SizedBox.expand(
-            child: const FittedBox(
-              fit: BoxFit.contain,
-              child: const Icon(Icons.skip_previous),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class PreviousButton extends StatelessWidget {
-  const PreviousButton({Key key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    // TODO: implement build
-    return const Material(
-      elevation: 0.0,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: const InkWell(
-        onTap: MediaPlayer.onSkipPrevious,
-        child: const Padding(
-          padding: const EdgeInsets.all(20),
-          child: const SizedBox.expand(
-            child: const FittedBox(
-              fit: BoxFit.contain,
-              child: const Icon(Icons.skip_previous),
+    return Hero(
+      tag: SongInfoInherited.of(context).songInfo.hashCode.toString() +
+          'skip_previous',
+      transitionOnUserGestures: true,
+      flightShuttleBuilder: Constants.targetPriorityFlightShuttleBuilder,
+      child: const Material(
+        elevation: 0.0,
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: const InkWell(
+          onTap: MediaPlayer.onSkipPrevious,
+          child: const Padding(
+            padding: const EdgeInsets.all(20),
+            child: const SizedBox.expand(
+              child: const FittedBox(
+                fit: BoxFit.contain,
+                child: const Icon(Icons.skip_previous),
+              ),
             ),
           ),
         ),
@@ -1603,19 +1565,23 @@ class HeroPlayButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return const Material(
-      elevation: 0.0,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: const InkWell(
-        onTap: MediaPlayer.onPlayAndPause,
-        child: const Padding(
-          padding: const EdgeInsets.all(20),
-          child: const SizedBox.expand(
-            child: const FittedBox(
-              fit: BoxFit.contain,
-              child: const PlayButtonIcon(),
+    return Hero(
+      tag: SongInfoInherited.of(context).songInfo.hashCode.toString() + 'play',
+      transitionOnUserGestures: true,
+      child: const Material(
+        elevation: 0.0,
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: const InkWell(
+          onTap: MediaPlayer.onPlayAndPause,
+          child: const Padding(
+            padding: const EdgeInsets.all(20),
+            child: const SizedBox.expand(
+              child: const FittedBox(
+                fit: BoxFit.contain,
+                child: const PlayButtonIcon(),
+              ),
             ),
           ),
         ),
@@ -1669,46 +1635,25 @@ class SkipNextButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return const Material(
-      elevation: 0.0,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: const InkWell(
-        onTap: MediaPlayer.onSkipNext,
-        child: const Padding(
-          padding: const EdgeInsets.all(20),
-          child: const SizedBox.expand(
-            child: const FittedBox(
-              fit: BoxFit.contain,
-              child: const Icon(Icons.skip_next),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class NextButton extends StatelessWidget {
-  const NextButton({Key key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    // TODO: implement build
-    return const Material(
-      elevation: 0.0,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      clipBehavior: Clip.hardEdge,
-      child: const InkWell(
-        onTap: MediaPlayer.onSkipNext,
-        child: const Padding(
-          padding: const EdgeInsets.all(20),
-          child: const SizedBox.expand(
-            child: const FittedBox(
-              fit: BoxFit.contain,
-              child: const Icon(Icons.skip_next),
+    return Hero(
+      tag: SongInfoInherited.of(context).songInfo.hashCode.toString() +
+          'skip_next',
+      flightShuttleBuilder: Constants.targetPriorityFlightShuttleBuilder,
+      transitionOnUserGestures: true,
+      child: const Material(
+        elevation: 0.0,
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: const InkWell(
+          onTap: MediaPlayer.onSkipNext,
+          child: const Padding(
+            padding: const EdgeInsets.all(20),
+            child: const SizedBox.expand(
+              child: const FittedBox(
+                fit: BoxFit.contain,
+                child: const Icon(Icons.skip_next),
+              ),
             ),
           ),
         ),

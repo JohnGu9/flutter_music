@@ -17,7 +17,7 @@ class MediaMetadataRetriever {
         List palette = methodCall.arguments;
         String path = palette[index++];
         if (palette.length == index) {
-          debugPrint('Palette is null');
+//          debugPrint('Palette is null');
         } else {
           List<Color> colors = List<Color>();
           for (; index < palette.length; index++) {
@@ -26,7 +26,7 @@ class MediaMetadataRetriever {
           }
           filePathToPaletteMap[path].value = colors;
         }
-        debugPrint(filePathToPaletteMap[path].value.toString());
+//        debugPrint(filePathToPaletteMap[path].value.toString());
         break;
       default:
     }

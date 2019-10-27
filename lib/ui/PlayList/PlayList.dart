@@ -143,14 +143,13 @@ class PlayList extends StatefulWidget {
 }
 
 class _PlayListState extends State<PlayList>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static _load() async {
     // wait for MediaPlayer Loaded
     while (Variable.mediaPlayerLoading == null) {
       await Future.delayed(const Duration(milliseconds: 300));
     }
     await Variable.mediaPlayerLoading;
-
 
     // Start Load PlayList
     final defaultListNotifier = Variable.defaultList;
@@ -255,6 +254,7 @@ class _PlayListState extends State<PlayList>
   void initState() {
     // TODO: implement initState
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Variable.outerScrollController = ScrollController();
     Variable.tabController =
         TabController(vsync: this, length: 4, initialIndex: 2);
@@ -265,13 +265,13 @@ class _PlayListState extends State<PlayList>
   void dispose() {
     // TODO: implement dispose
     super.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     Variable.tabController.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    systemSetup(context);
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: NestedScrollView(
@@ -280,6 +280,21 @@ class _PlayListState extends State<PlayList>
         body: const MainTabView(),
       ),
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // user returned to our app
+      systemSetup(context);
+      debugPrint('onResume');
+    } else if (state == AppLifecycleState.inactive) {
+      // app is inactive
+    } else if (state == AppLifecycleState.paused) {
+      // user is about quit our app temporally
+    } else if (state == AppLifecycleState.suspending) {
+      // app suspended (not used in iOS)
+    }
   }
 }
 
@@ -450,7 +465,10 @@ class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
                 padding: const EdgeInsets.only(bottom: 120.0),
                 child: Center(child: Icon(Icons.filter_list)),
               ),
-        onDragStart: () => Variable.panelAntiBlock.value = true,
+        onDragStart: () {
+          Feedback.forTap(context);
+          return Variable.panelAntiBlock.value = true;
+        },
         onDragEnd: () => Variable.panelAntiBlock.value = false,
         children: <Widget>[
           for (final songInfo in widget.list) _itemBuilder(context, songInfo),
@@ -598,7 +616,10 @@ class _DefaultListBuilderState extends State<DefaultListBuilder> {
             : const Padding(
                 padding: const EdgeInsets.only(bottom: 120.0),
                 child: Center(child: Icon(Icons.filter_list))),
-        onDragStart: () => Variable.panelAntiBlock.value = true,
+        onDragStart: () {
+          Feedback.forTap(context);
+          return Variable.panelAntiBlock.value = true;
+        },
         onDragEnd: () => Variable.panelAntiBlock.value = false,
         children: <Widget>[
           for (final songInfo in widget.list) _itemBuilder(context, songInfo),

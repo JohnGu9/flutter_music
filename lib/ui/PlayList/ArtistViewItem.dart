@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
@@ -213,6 +214,7 @@ class ForegroundView extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: () => Feedback.forLongPress(context),
         child: Align(
           alignment: Alignment.bottomCenter,
           child: AspectRatio(
@@ -224,13 +226,10 @@ class ForegroundView extends StatelessWidget {
                 child: FadeTransition(
                   opacity: const AlwaysStoppedAnimation<double>(
                       Constants.textOpacity),
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: Text(
-                      artist.name,
-                      style: Theme.of(context).textTheme.body1,
-                      maxLines: 2,
-                    ),
+                  child: AutoSizeText(
+                    artist.name,
+                    style: Theme.of(context).textTheme.body1,
+                    maxLines: 2,
                   ),
                 ),
               ),

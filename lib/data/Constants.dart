@@ -329,7 +329,7 @@ class Constants {
 }
 
 void systemSetup(BuildContext context) async {
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
 

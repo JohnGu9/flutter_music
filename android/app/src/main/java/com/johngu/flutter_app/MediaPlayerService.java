@@ -20,7 +20,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
-import android.support.v4.media.session.MediaControllerCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.Log;
@@ -57,12 +56,13 @@ public final class MediaPlayerService extends IntentService
     static private final float playbackSpeed = 1.0f;
 
     static private MediaPlayer mediaPlayer;
-    static private MediaControllerCompat mediaController;
+
     static private MediaSessionCompat mediaSession;
     static private MediaSessionCompat.Callback mediaSessionCallBack;
     static private PlaybackStateCompat.Builder playbackStateBuilder;
     static private volatile PlaybackStateCompat playbackState;
     static private MediaMetadataCompat.Builder mediaMetadata;
+
     static private AudioManager audioManager;
     static private NotificationManager notificationManager;
     static private AudioAttributes audioAttributes;
@@ -132,8 +132,10 @@ public final class MediaPlayerService extends IntentService
             }
             synchronized (this) {
                 if (mediaPlayer.isPlaying()) {
+                    mediaSession.setActive(true);
                     notificationManager.notify(MediaPlayerNotifyID, notificationActing);
                 } else {
+                    mediaSession.setActive(false);
                     notificationManager.notify(MediaPlayerNotifyID, notificationPending);
                 }
             }
@@ -190,28 +192,6 @@ public final class MediaPlayerService extends IntentService
         return mediaPlayerServiceBinder;
     }
 
-    private void AudioFocusInit() {
-        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                    .setAudioAttributes(audioAttributes)
-                    .setAcceptsDelayedFocusGain(true)
-                    .setWillPauseWhenDucked(true)
-                    .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
-                    .build();
-        }
-    }
-
-    private int audioFocusRequest() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioManager.abandonAudioFocusRequest(audioFocusRequest);
-            return audioManager.requestAudioFocus(audioFocusRequest);
-        } else {
-            audioManager.abandonAudioFocus(this);
-            return audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
-        }
-    }
-
     public final void MediaPlayerInit() {
         mediaPlayer = new MediaPlayer();
         mediaPlayer.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
@@ -233,43 +213,25 @@ public final class MediaPlayerService extends IntentService
 
         mediaSession = new MediaSessionCompat(this, "MediaPlayer");
         mediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
-        mediaController = new MediaControllerCompat(this, mediaSession);
 
         mediaSessionCallBack = new MediaSessionCompat.Callback() {
-            @Override
-            public void onPlay() {
-                super.onPlay();
-            }
-
-            @Override
-            public void onPause() {
-                super.onPause();
-            }
-
-            @Override
-            public void onSkipToPrevious() {
-                super.onSkipToPrevious();
-            }
-
-            @Override
-            public void onSkipToNext() {
-                super.onSkipToNext();
-            }
-
             @TargetApi(Build.VERSION_CODES.N)
             @Override
             public void onSeekTo(long pos) {
-                super.onSeekTo(pos);
                 mediaPlayer.seekTo(Math.toIntExact(pos));
+                super.onSeekTo(pos);
             }
-
         };
         mediaSession.setCallback(mediaSessionCallBack);
 
         playbackStateBuilder = new PlaybackStateCompat.Builder();
         playbackStateBuilder
                 .setState(PlaybackStateCompat.STATE_NONE, 0, playbackSpeed)
-                .setActions(PlaybackStateCompat.ACTION_SEEK_TO);
+                .setActions(PlaybackStateCompat.ACTION_SEEK_TO
+                        | PlaybackStateCompat.ACTION_PLAY
+                        | PlaybackStateCompat.ACTION_PAUSE
+                        | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                        | PlaybackStateCompat.ACTION_SKIP_TO_NEXT);
         playbackState = playbackStateBuilder.build();
 
         mediaSession.setPlaybackState(playbackState);
@@ -297,13 +259,14 @@ public final class MediaPlayerService extends IntentService
                 new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_UPDATE_CURRENT);
 
-        MediaStyle mediaStyle = new MediaStyle().setShowActionsInCompactView(1).setMediaSession(mediaSession.getSessionToken());
+        MediaStyle mediaStyle = new MediaStyle().setShowActionsInCompactView(1,2).setMediaSession(mediaSession.getSessionToken());
         notificationPendingBuilder = new NotificationCompat.Builder(this, MediaPlayerNotificationChannel_ID)
                 .setSmallIcon(R.drawable.ic_stat_name)
                 .setContentIntent(contentIntent)
                 .setContentTitle("Playback")
                 .setSound(null)
                 .setOngoing(false)
+                .setShowWhen(false)
                 .setStyle(mediaStyle)
                 .setPriority(Notification.PRIORITY_DEFAULT)
                 .addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious))
@@ -316,6 +279,7 @@ public final class MediaPlayerService extends IntentService
                 .setContentTitle("Playback")
                 .setSound(null)
                 .setOngoing(true)
+                .setShowWhen(false)
                 .setStyle(mediaStyle)
                 .setPriority(Notification.PRIORITY_DEFAULT)
                 .addAction(generateAction(R.drawable.ic_previous, "Previous", MediaPlayerService.ACTION_OnPrevious))
@@ -330,6 +294,36 @@ public final class MediaPlayerService extends IntentService
         intent.setAction(intentAction);
         PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 1, intent, PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Action.Builder(icon, title, pendingIntent).build();
+    }
+
+    private void AudioFocusInit() {
+        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(audioAttributes)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setWillPauseWhenDucked(true)
+                    .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
+                    .build();
+        }
+    }
+
+    private int audioFocusRequest() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioManager.abandonAudioFocusRequest(audioFocusRequest);
+            return audioManager.requestAudioFocus(audioFocusRequest);
+        } else {
+            audioManager.abandonAudioFocus(this);
+            return audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+        }
+    }
+
+    private void audioFocusRelease() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioManager.abandonAudioFocusRequest(audioFocusRequest);
+        } else {
+            audioManager.abandonAudioFocus(this);
+        }
     }
 
     private void updatePlaybackState(int state, int position) {
@@ -356,6 +350,7 @@ public final class MediaPlayerService extends IntentService
 
         public final void pause() {
             onPause();
+            audioFocusRelease();
         }
 
         public final void stop() {
@@ -363,6 +358,7 @@ public final class MediaPlayerService extends IntentService
             notificationManager.cancel(MediaPlayerNotifyID);
             updatePlaybackState(PlaybackStateCompat.STATE_NONE, 0);
             Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "stopped");
+            audioFocusRelease();
         }
 
         public final void reset() {
@@ -370,6 +366,7 @@ public final class MediaPlayerService extends IntentService
             notificationManager.cancel(MediaPlayerNotifyID);
             updatePlaybackState(PlaybackStateCompat.STATE_NONE, 0);
             Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "idle");
+            audioFocusRelease();
         }
 
         public final void release() {
@@ -378,38 +375,42 @@ public final class MediaPlayerService extends IntentService
             mediaPlayer = null;
             updatePlaybackState(PlaybackStateCompat.STATE_NONE, 0);
             Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "end");
+            audioFocusRelease();
         }
 
         public final void setDataSource(String path) {
             currentDataSource = path;
-            Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "preparing", new MethodChannel.Result() {
-                @Override
-                public void success(Object o) {
-                    ArrayList<String> res = (ArrayList<String>) o;
-                    title = res.get(0);
-                    artist = res.get(1);
-                    album = res.get(2);
-                    Thread thread = new Thread(updateNotificationRunnable);
-                    thread.setPriority(Thread.MIN_PRIORITY);
-                    thread.start();
-                }
+            Constants.MediaPlayerMethodChannel.invokeMethod(
+                    "stateManager",
+                    "preparing",
+                    new MethodChannel.Result() {
+                        @Override
+                        public void success(Object o) {
+                            ArrayList<String> res = (ArrayList<String>) o;
+                            title = res.get(0);
+                            artist = res.get(1);
+                            album = res.get(2);
+                            Thread thread = new Thread(updateNotificationRunnable);
+                            thread.setPriority(Thread.MIN_PRIORITY);
+                            thread.start();
+                        }
 
-                @Override
-                public void error(String s, String s1, Object o) {
-                    album = artist = title = null;
-                    Thread thread = new Thread(updateNotificationRunnable);
-                    thread.setPriority(Thread.MIN_PRIORITY);
-                    thread.start();
-                }
+                        @Override
+                        public void error(String s, String s1, Object o) {
+                            album = artist = title = null;
+                            Thread thread = new Thread(updateNotificationRunnable);
+                            thread.setPriority(Thread.MIN_PRIORITY);
+                            thread.start();
+                        }
 
-                @Override
-                public void notImplemented() {
-                    album = artist = title = null;
-                    Thread thread = new Thread(updateNotificationRunnable);
-                    thread.setPriority(Thread.MIN_PRIORITY);
-                    thread.start();
-                }
-            });
+                        @Override
+                        public void notImplemented() {
+                            album = artist = title = null;
+                            Thread thread = new Thread(updateNotificationRunnable);
+                            thread.setPriority(Thread.MIN_PRIORITY);
+                            thread.start();
+                        }
+                    });
             Thread prepareThread = new Thread(new SetDataSourceRunnable(path));
             prepareThread.setPriority(Thread.MIN_PRIORITY);
             prepareThread.start();
@@ -468,7 +469,7 @@ public final class MediaPlayerService extends IntentService
                     try {
                         mediaPlayer.setDataSource(currentDataSource);
                     } catch (IOException e) {
-                        e.printStackTrace();
+                        Log.d("onSetDateSource", e.toString());
                     }
                     updatePlaybackState(PlaybackStateCompatInit, 0);
                 } else {
@@ -490,17 +491,19 @@ public final class MediaPlayerService extends IntentService
             int res = audioFocusRequest();
             if (res != AudioManager.AUDIOFOCUS_REQUEST_FAILED) {
                 mediaPlayer.start();
-                notificationManager.notify(MediaPlayerNotifyID, notificationActing);
-                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
             }
+        }
+        if (mediaPlayer.isPlaying()) {
             Constants.mainThreadHandler.post(onPlayRunnable);
+            updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
+            notificationManager.notify(MediaPlayerNotifyID, notificationActing);
         }
     }
 
     private void onPause() {
         mediaPlayer.pause();
-        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
         Constants.mainThreadHandler.post(onPauseRunnable);
+        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
         notificationManager.notify(MediaPlayerNotifyID, notificationPending);
     }
 
@@ -522,6 +525,7 @@ public final class MediaPlayerService extends IntentService
                 break;
             case ACTION_OnPause:
                 onPause();
+                audioFocusRelease();
                 break;
             case ACTION_OnPrevious:
                 onPrevious();
@@ -587,6 +591,7 @@ public final class MediaPlayerService extends IntentService
     @Override
     public final boolean onError(MediaPlayer mediaPlayer, int what, int extra) {
         updatePlaybackState(PlaybackStateCompat.STATE_ERROR, 0);
+        audioFocusRelease();
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onErrorListener",
                 new int[]{what, extra},
@@ -611,7 +616,11 @@ public final class MediaPlayerService extends IntentService
 
     @Override
     public final void onSeekComplete(MediaPlayer mediaPlayer) {
-        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
+        if (mediaPlayer.isPlaying()) {
+            updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
+        } else {
+            updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
+        }
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onSeekCompleteListener",
                 mediaPlayer.getCurrentPosition(),
@@ -685,6 +694,8 @@ public final class MediaPlayerService extends IntentService
                 if (mediaPlayer != null && !mediaPlayer.isPlaying() && isPlayingBeforeLossFocus) {
                     onPlay();
                 }
+                // clear flag
+                isPlayingBeforeLossFocus = false;
                 break;
         }
     }

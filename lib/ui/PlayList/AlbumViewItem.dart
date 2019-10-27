@@ -1,11 +1,12 @@
 import 'dart:math';
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
+
 import '../../data/Constants.dart';
 import '../../data/Variable.dart';
-
 import 'AlbumViewPage.dart';
 
 const currentPage = 1;
@@ -28,8 +29,8 @@ class _AlbumViewItemState extends State<AlbumViewItem> {
     _image = await Variable.getImageFromAlbums(widget.album);
     await SchedulerBinding.instance.endOfFrame;
     _loaded = true;
-    if(mounted){
-      setState(() {} );
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -129,6 +130,7 @@ class ForegroundView extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: () => Feedback.forLongPress(context),
         child: Align(
           alignment: Alignment.bottomCenter,
           child: AspectRatio(
@@ -136,8 +138,8 @@ class ForegroundView extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8.0, vertical: 4.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                 child: FadeTransition(
                   opacity: const AlwaysStoppedAnimation<double>(
                       Constants.textOpacity),
@@ -146,24 +148,18 @@ class ForegroundView extends StatelessWidget {
                     children: <Widget>[
                       Expanded(
                         flex: 10,
-                        child: FittedBox(
-                          fit: BoxFit.contain,
-                          child: Text(
-                            album.title,
-                            style: Theme.of(context).textTheme.title,
-                            maxLines: 1,
-                          ),
+                        child: AutoSizeText(
+                          album.title,
+                          style: Theme.of(context).textTheme.title,
+                          maxLines: 1,
                         ),
                       ),
                       Expanded(
                         flex: 9,
-                        child: FittedBox(
-                          fit: BoxFit.contain,
-                          child: Text(
-                            album.artist,
-                            style: Theme.of(context).textTheme.body1,
-                            maxLines: 1,
-                          ),
+                        child: AutoSizeText(
+                          album.artist,
+                          style: Theme.of(context).textTheme.body1,
+                          maxLines: 1,
                         ),
                       ),
                     ],

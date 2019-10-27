@@ -2,11 +2,10 @@ import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import 'data/Constants.dart';
 import 'data/Variable.dart';
-import 'plugin/AndroidPlugin.dart';
+import 'plugin/ExtendPlugin.dart';
 import 'plugin/MediaPlayer.dart';
 import 'ui/Panel/Panel.dart';
 import 'ui/PlayList/PlayList.dart';
@@ -147,7 +146,8 @@ class MyApp extends StatefulWidget {
   _MyAppState createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
+class _MyAppState extends State<MyApp>
+    with SingleTickerProviderStateMixin {
   @override
   void initState() {
     // TODO: implement initState
@@ -180,11 +180,10 @@ class MyHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    SchedulerBinding.instance
-        .scheduleTask(() => systemSetup(context), Priority.idle);
+    systemSetup(context);
     return WillPopScope(
       onWillPop: () async {
-        AndroidPlugin.moveTaskToBack();
+        ExtendPlugin.moveTaskToBack();
         return false;
       },
       child: Container(
