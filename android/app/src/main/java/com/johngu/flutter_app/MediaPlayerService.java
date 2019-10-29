@@ -259,7 +259,7 @@ public final class MediaPlayerService extends IntentService
                 new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_UPDATE_CURRENT);
 
-        MediaStyle mediaStyle = new MediaStyle().setShowActionsInCompactView(1,2).setMediaSession(mediaSession.getSessionToken());
+        MediaStyle mediaStyle = new MediaStyle().setShowActionsInCompactView(1, 2).setMediaSession(mediaSession.getSessionToken());
         notificationPendingBuilder = new NotificationCompat.Builder(this, MediaPlayerNotificationChannel_ID)
                 .setSmallIcon(R.drawable.ic_stat_name)
                 .setContentIntent(contentIntent)
@@ -493,18 +493,27 @@ public final class MediaPlayerService extends IntentService
                 mediaPlayer.start();
             }
         }
-        if (mediaPlayer.isPlaying()) {
-            Constants.mainThreadHandler.post(onPlayRunnable);
-            updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
-            notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+        synchronized (this) {
+            if (mediaPlayer.isPlaying()) {
+                Constants.mainThreadHandler.post(onPlayRunnable);
+                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
+                notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+            } else {
+                Constants.mainThreadHandler.post(onPauseRunnable);
+                updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
+                notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+            }
         }
+
     }
 
     private void onPause() {
         mediaPlayer.pause();
-        Constants.mainThreadHandler.post(onPauseRunnable);
-        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
-        notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+        synchronized (this) {
+            Constants.mainThreadHandler.post(onPauseRunnable);
+            updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
+            notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+        }
     }
 
     private void onPrevious() {
