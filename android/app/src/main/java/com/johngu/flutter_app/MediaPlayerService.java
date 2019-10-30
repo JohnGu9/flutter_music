@@ -9,6 +9,9 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
@@ -64,7 +67,6 @@ public final class MediaPlayerService extends IntentService
     static private MediaMetadataCompat.Builder mediaMetadata;
 
     static private AudioManager audioManager;
-    static private NotificationManager notificationManager;
     static private AudioAttributes audioAttributes;
     static private AudioFocusRequest audioFocusRequest;
     static private Handler audioFocusRequestHandler;
@@ -74,11 +76,11 @@ public final class MediaPlayerService extends IntentService
     static private String album;
     static private float volume;
 
+    static private NotificationManager notificationManager;
     private NotificationCompat.Builder notificationPendingBuilder;
     static private Notification notificationPending;
     private NotificationCompat.Builder notificationActingBuilder;
     static private Notification notificationActing;
-    static private Bitmap emptyBitmap;
 
     static private final Runnable onPlayRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "started");
     static private final Runnable onPauseRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "paused");
@@ -115,21 +117,23 @@ public final class MediaPlayerService extends IntentService
             mediaSession.setMetadata(mediaMetadata.build());
 
             byte[] artwork = mmr.getEmbeddedPicture();
+            Bitmap bitmap;
             if (artwork != null) {
-                Bitmap bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
+                bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
                 notificationPendingBuilder.setLargeIcon(bitmap);
                 notificationActingBuilder.setLargeIcon(bitmap);
-//                notificationPendingBuilder.setColor(Color.argb(255, 0, 0, 127));
-//                notificationActingBuilder.setColor(Color.argb(255, 0, 0, 127));
                 notificationPending = notificationPendingBuilder.build();
                 notificationActing = notificationActingBuilder.build();
                 bitmap.recycle();
             } else {
-                notificationPendingBuilder.setLargeIcon(emptyBitmap);
-                notificationActingBuilder.setLargeIcon(emptyBitmap);
+                bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_artwork);
+                notificationPendingBuilder.setLargeIcon(bitmap);
+                notificationActingBuilder.setLargeIcon(bitmap);
                 notificationPending = notificationPendingBuilder.build();
                 notificationActing = notificationActingBuilder.build();
             }
+
+
             synchronized (this) {
                 if (mediaPlayer.isPlaying()) {
                     mediaSession.setActive(true);
@@ -142,6 +146,28 @@ public final class MediaPlayerService extends IntentService
 
         }
     };
+
+    public static Bitmap drawableToBitmap (Drawable drawable) {
+        Bitmap bitmap;
+
+        if (drawable instanceof BitmapDrawable) {
+            BitmapDrawable bitmapDrawable = (BitmapDrawable) drawable;
+            if(bitmapDrawable.getBitmap() != null) {
+                return bitmapDrawable.getBitmap();
+            }
+        }
+
+        if(drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
+            bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888); // Single color bitmap will be created of 1x1 pixel
+        } else {
+            bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+        }
+
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
+    }
 
     static final String MediaPlayerNotificationChannel_ID = "MediaPlayer";
     static final CharSequence MediaPlayerNotificationChannel_NAME = "Playback";
@@ -236,6 +262,7 @@ public final class MediaPlayerService extends IntentService
 
         mediaSession.setPlaybackState(playbackState);
         mediaSession.setActive(true);
+
 
         // Create the NotificationChannel, but only on API 26+ because
         // the NotificationChannel class is new and not in the support library

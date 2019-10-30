@@ -4,13 +4,15 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'data/Constants.dart';
+import 'data/Database.dart';
 import 'data/Variable.dart';
 import 'plugin/ExtendPlugin.dart';
 import 'plugin/MediaPlayer.dart';
 import 'ui/Panel/Panel.dart';
 import 'ui/PlayList/PlayList.dart';
 
-void main() {
+void main()async {
+  await testDb();
   Variable.mediaPlayerLoading = mediaPlayerSetup();
   runApp(const MyApp());
 }

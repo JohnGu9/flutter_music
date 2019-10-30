@@ -170,33 +170,7 @@ class _PlayListState extends State<PlayList>
     Variable.panelAntiBlock.value = false;
   }
 
-  Widget _sliverPersistentHeader;
-
   List<Widget> _nestedAppBarBuilder(BuildContext context, _) {
-    _sliverPersistentHeader ??= SliverPersistentHeader(
-      floating: false,
-      pinned: true,
-      delegate: _SliverPersistentHeaderDelegate(
-        TabBar(
-          controller: Variable.tabController,
-          indicatorColor: Theme.of(context).indicatorColor,
-          tabs: const <Tab>[
-            const Tab(
-              icon: const Icon(Icons.person),
-            ),
-            const Tab(
-              icon: const Icon(Icons.album),
-            ),
-            const Tab(
-              icon: const Icon(Icons.view_list),
-            ),
-            const Tab(
-              icon: const Icon(Icons.favorite),
-            ),
-          ],
-        ),
-      ),
-    );
     return [
       SliverAppBar(
         floating: true,
@@ -239,7 +213,30 @@ class _PlayListState extends State<PlayList>
         ),
         backgroundColor: Theme.of(context).backgroundColor.withOpacity(0.9),
       ),
-      _sliverPersistentHeader,
+      SliverPersistentHeader(
+        floating: false,
+        pinned: true,
+        delegate: _SliverPersistentHeaderDelegate(
+          TabBar(
+            controller: Variable.tabController,
+            indicatorColor: Theme.of(context).indicatorColor,
+            tabs: const <Tab>[
+              const Tab(
+                icon: const Icon(Icons.person),
+              ),
+              const Tab(
+                icon: const Icon(Icons.album),
+              ),
+              const Tab(
+                icon: const Icon(Icons.view_list),
+              ),
+              const Tab(
+                icon: const Icon(Icons.favorite),
+              ),
+            ],
+          ),
+        ),
+      ),
     ];
   }
 
@@ -347,9 +344,7 @@ class _SliverPersistentHeaderDelegate extends SliverPersistentHeaderDelegate {
 }
 
 class MainTabView extends StatelessWidget {
-  const MainTabView({
-    Key key,
-  }) : super(key: key);
+  const MainTabView({Key key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -465,9 +460,9 @@ class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
                 padding: const EdgeInsets.only(bottom: 120.0),
                 child: Center(child: Icon(Icons.filter_list)),
               ),
-        onDragStart: () {
-          Feedback.forTap(context);
-          return Variable.panelAntiBlock.value = true;
+        onDragStart: ()async {
+          await Feedback.forLongPress(context);
+          Variable.panelAntiBlock.value = true;
         },
         onDragEnd: () => Variable.panelAntiBlock.value = false,
         children: <Widget>[
@@ -616,9 +611,9 @@ class _DefaultListBuilderState extends State<DefaultListBuilder> {
             : const Padding(
                 padding: const EdgeInsets.only(bottom: 120.0),
                 child: Center(child: Icon(Icons.filter_list))),
-        onDragStart: () {
-          Feedback.forTap(context);
-          return Variable.panelAntiBlock.value = true;
+        onDragStart: () async {
+          await Feedback.forLongPress(context);
+          Variable.panelAntiBlock.value = true;
         },
         onDragEnd: () => Variable.panelAntiBlock.value = false,
         children: <Widget>[

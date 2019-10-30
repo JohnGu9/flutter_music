@@ -212,6 +212,7 @@ public class MainActivity extends FlutterActivity {
             @Override
             public final void onServiceDisconnected(ComponentName name) {
                 Log.d("MediaPlayerService", "onServiceDisconnected");
+                mediaPlayerServiceBinder = null;
             }
         };
         mediaPlayerServiceIntent = new Intent(this, MediaPlayerService.class);
