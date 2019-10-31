@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart';
+import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 testDb() async {
@@ -10,11 +10,20 @@ testDb() async {
 //  linkedList.add('john1');
 //  linkedList.add('john2');
 
-  linkedList.addAll(['john0', 'john1', 'john2']);
+  linkedList.addAll(['john0', 'john2']);
+  linkedList.insertAll(['john3', 'john4']);
+  linkedList.sync([
+    'john0',
+    'john1',
+    'john2',
+    'john3',
+  ]);
 
-  linkedList.insert(0, 'john3');
-  linkedList.insert(0, 'john4');
-  linkedList.insert(0, 'john5');
+//  linkedList.insert(0, 'john3');
+//  linkedList.insert(0, 'john4');
+//  linkedList.insert(0, 'john5');
+
+//  await linkedList.removeAt(2);
 
   print(linkedList.list);
   print(await linkedList.getMap);
@@ -74,7 +83,7 @@ class LinkedList<T> {
   }
 
   static Future<Database> easeDatabase(String name) async =>
-      openDatabase(join(await getDatabasesPath(), '$name.db'));
+      openDatabase(path.join(await getDatabasesPath(), '$name.db'));
 
   static Future<LinkedList<T>> easeLinkedList<T>({
     @required String database,
@@ -164,13 +173,14 @@ class LinkedList<T> {
     );
   }
 
+  int get length => list.length;
+
   add(T value) {
     if (list.contains(value)) {
       /// linked list can't contains two same value
       return;
     }
     list.add(value);
-    print(elementToMap(list.length - 1));
     if (list.length == 1) {
       database.insert(
         table,
@@ -194,7 +204,10 @@ class LinkedList<T> {
   }
 
   addAll(Iterable iterable) {
-    assert(iterable.length != 0);
+    if (iterable == null || iterable.length == 0) {
+      return;
+    }
+
     final lastPosition = list.length;
     for (final element in iterable) {
       if (!list.contains(element)) {
@@ -247,6 +260,33 @@ class LinkedList<T> {
     );
   }
 
+  insertAll(Iterable iterable) {
+    if (iterable == null || iterable.length == 0) {
+      return;
+    }
+
+    int _length = 0;
+    for (final element in iterable) {
+      if (!list.contains(element)) {
+        list.insert(0, element);
+        _length++;
+      }
+    }
+
+    for (int index = 0; index < _length; index++) {
+      database.insert(
+        table,
+        elementToMap(index),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      if (list.length > _length) {
+        database.update(table, elementToMap(_length),
+            where: primaryKey.toWhereString(), whereArgs: [list[_length]]);
+      }
+    }
+  }
+
   T removeAt(int index) {
     database.delete(
       table,
@@ -254,20 +294,25 @@ class LinkedList<T> {
       whereArgs: [list[index]],
     );
     final res = list.removeAt(index);
-    database.update(
-      table,
-      elementToMap(index - 1),
-      where: primaryKey.toWhereString(),
-      whereArgs: [list[index - 1]],
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    database.update(
-      table,
-      elementToMap(index),
-      where: primaryKey.toWhereString(),
-      whereArgs: [list[index]],
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    if (index > 0) {
+      database.update(
+        table,
+        elementToMap(index - 1),
+        where: primaryKey.toWhereString(),
+        whereArgs: [list[index - 1]],
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    if (index < length - 1) {
+      database.update(
+        table,
+        elementToMap(index),
+        where: primaryKey.toWhereString(),
+        whereArgs: [list[index]],
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
     return res;
   }
 
@@ -280,6 +325,64 @@ class LinkedList<T> {
     } else {
       final value = removeAt(oldIndex);
       insert(newIndex, value);
+    }
+  }
+
+  sync(
+    Iterable iterable, {
+    bool shouldAdd =
+        true, //whether add the element that don't exist in the list
+    Function
+        compareSubElement, // control what sub element in class should be compare
+    Function shouldUpdate, // callback once detect distinct
+    Function updated, // callback after detect distinct and sync finish
+  }) {
+    /// delete all [list] elements that [iterable] don't contains
+    /// insert all [iterable] elements that [list] don't contains
+    final copy = Set();
+    bool diff = false;
+
+    compareSubElement ??= (Object element) => element;
+
+    for (final element in iterable) {
+      copy.add(compareSubElement(element));
+    }
+
+    int Function(int index) compare;
+    int Function(int index) rawCompare = (int index) {
+      if (!copy.contains(list[index])) {
+        removeAt(index);
+      } else {
+        copy.remove(list[index++]);
+      }
+      return index;
+    };
+
+    compare = (int index) {
+      if (!copy.contains(list[index])) {
+        removeAt(index);
+        shouldUpdate ??= () {};
+        shouldUpdate();
+        diff = true;
+        // update compare function so that shouldUpdate function would just call once.
+        compare = rawCompare;
+      } else {
+        copy.remove(list[index++]);
+      }
+      return index;
+    };
+
+    for (int index = 0; index < length;) {
+      index = compare(index);
+    }
+
+    if (shouldAdd && copy.length != 0) {
+      insertAll(copy);
+      diff = true;
+    }
+
+    if (diff && updated != null) {
+      updated();
     }
   }
 }
@@ -310,7 +413,7 @@ class SQLiteLinkedList<T> {
   static const nextIndex = 1;
 
   static Future<Database> easeDatabase(String name) async =>
-      openDatabase(join(await getDatabasesPath(), '$name.db'));
+      openDatabase(path.join(await getDatabasesPath(), '$name.db'));
 
   static Future<SQLiteLinkedList<T>> easeLinkedList<T>({
     @required String database,

@@ -126,7 +126,7 @@ public final class MediaPlayerService extends IntentService
                 notificationActing = notificationActingBuilder.build();
                 bitmap.recycle();
             } else {
-                bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_artwork);
+                bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_abstract);
                 notificationPendingBuilder.setLargeIcon(bitmap);
                 notificationActingBuilder.setLargeIcon(bitmap);
                 notificationPending = notificationPendingBuilder.build();

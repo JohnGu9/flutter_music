@@ -8,6 +8,10 @@ class Constants {
   static const String MaterialAppTitle = 'Music';
   static const String HomePageTitle = 'Music';
 
+  static const String database = 'johngu';
+  static const String libraryTable = 'library';
+  static const String favouriteTable = 'favourite';
+
   static const Color darkGrey = Color(0xFF202020);
   static const Color lightGrey = Color(0xFFE0E0E0);
   static const String defaultFontFamily = 'Hind';

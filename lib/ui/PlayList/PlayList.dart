@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_app/data/Database.dart' as database;
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 
 import '../../component/AnimatedPopUpWidget.dart';
@@ -146,20 +147,28 @@ class _PlayListState extends State<PlayList>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static _load() async {
     // wait for MediaPlayer Loaded
-    while (Variable.mediaPlayerLoading == null) {
+    while (Variable.mediaPlayerInitialization == null) {
       await Future.delayed(const Duration(milliseconds: 300));
     }
-    await Variable.mediaPlayerLoading;
+    await Variable.mediaPlayerInitialization;
 
     // Start Load PlayList
+    final audioQuery = Variable.audioQuery;
+    final List<SongInfo> allSong = await audioQuery.getSongs();
+    allSong.forEach((SongInfo songInfo) {
+      Variable.filePathToSongMap[songInfo.filePath] = songInfo;
+    });
+    Variable.library = await database.LinkedList.easeLinkedList<String>(
+        database: Constants.database, table: Constants.libraryTable,drop: true);
+    Variable.favourite = await database.LinkedList.easeLinkedList<String>(
+        database: Constants.database, table: Constants.favouriteTable,drop: true);
+
+
+
     final defaultListNotifier = Variable.defaultList;
     final favoriteListNotifier = Variable.favouriteList;
-    if (defaultListNotifier.value != null ||
-        favoriteListNotifier.value != null) {
-      return;
-    }
-    final audioQuery = Variable.audioQuery;
-    defaultListNotifier.value = await audioQuery.getSongs();
+
+    defaultListNotifier.value = allSong;
     favoriteListNotifier.value = List();
     defaultListNotifier.value.forEach((SongInfo songInfo) {
       Variable.filePathToSongMap[songInfo.filePath] = songInfo;
@@ -255,7 +264,7 @@ class _PlayListState extends State<PlayList>
     Variable.outerScrollController = ScrollController();
     Variable.tabController =
         TabController(vsync: this, length: 4, initialIndex: 2);
-    Variable.playListLoading ??= _load();
+    Variable.playListInitialization ??= _load();
   }
 
   @override
@@ -460,7 +469,7 @@ class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
                 padding: const EdgeInsets.only(bottom: 120.0),
                 child: Center(child: Icon(Icons.filter_list)),
               ),
-        onDragStart: ()async {
+        onDragStart: () async {
           await Feedback.forLongPress(context);
           Variable.panelAntiBlock.value = true;
         },
@@ -699,10 +708,10 @@ class _AlbumListState extends State<AlbumList> {
   static Future loading;
 
   static _load() async {
-    while (Variable.playListLoading == null) {
+    while (Variable.playListInitialization == null) {
       await Future.delayed(const Duration(milliseconds: 300));
     }
-    await Variable.playListLoading;
+    await Variable.playListInitialization;
     await Future.delayed(Constants.defaultLoadingDelay);
     Variable.albumToSongsMapLoading ??= Variable.generalMapAlbumToSongs();
     await Variable.albumToSongsMapLoading;
@@ -809,10 +818,10 @@ class _ArtistListState extends State<ArtistList> {
   static Future loading;
 
   static _load() async {
-    while (Variable.playListLoading == null) {
+    while (Variable.playListInitialization == null) {
       await Future.delayed(const Duration(milliseconds: 300));
     }
-    await Variable.playListLoading;
+    await Variable.playListInitialization;
     await Future.delayed(Constants.defaultLoadingDelay);
     Variable.artistToSongsMapLoading ??= Variable.generalMapArtistToSong();
     await Variable.artistToSongsMapLoading;

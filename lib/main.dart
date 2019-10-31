@@ -13,7 +13,7 @@ import 'ui/PlayList/PlayList.dart';
 
 void main()async {
   await testDb();
-  Variable.mediaPlayerLoading = mediaPlayerSetup();
+  Variable.mediaPlayerInitialization = mediaPlayerSetup();
   runApp(const MyApp());
 }
 

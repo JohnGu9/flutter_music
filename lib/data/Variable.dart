@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_app/component/AntiBlockingWidget.dart';
+import 'package:flutter_app/data/Database.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 import 'package:share_extend/share_extend.dart';
 
@@ -12,27 +13,11 @@ import '../plugin/MediaMetadataRetriever.dart';
 import 'Constants.dart';
 
 class Variable {
-  // Controller
   static final audioQuery = FlutterAudioQuery();
 
-//  static final database = _dbInit();
-//
-//  static Future<Database> _dbInit() async => openDatabase(
-//        // Set the path to the database.
-//        join(await getDatabasesPath(), 'johngu.db'),
-//        // When the database is first created, create a table to store dogs.
-//        onCreate: (db, version) {
-//          // Run the CREATE TABLE statement on the database.
-//          return db.execute(
-//            "CREATE TABLE library(id INTEGER PRIMARY KEY, filePath TEXT)",
-//          );
-//        },
-//        // Set the version. This executes the onCreate function and provides a
-//        // path to perform database upgrades and downgrades.
-//        version: 1,
-//      );
+  static LinkedList library;
+  static LinkedList favourite;
 
-  // Data
   static final CustomValueNotifier<List> currentList =
       CustomValueNotifier(null);
   static final CustomValueNotifier<SongInfo> currentItem =
@@ -83,8 +68,8 @@ class Variable {
     return Variable.futureImages[path];
   }
 
-  static Future mediaPlayerLoading;
-  static Future playListLoading;
+  static Future mediaPlayerInitialization;
+  static Future playListInitialization;
 
   static final filePathToSongMap = Map<String, SongInfo>();
   static final albumIdToSongsMap = Map<String, List<SongInfo>>();
@@ -97,7 +82,7 @@ class Variable {
   static Future albumToSongsMapLoading;
 
   static generalMapAlbumToSongs() async {
-    await playListLoading;
+    await playListInitialization;
     albums = await audioQuery.getAlbums();
     // Sort albums
     final List<AlbumInfo> _unknownAlbums = List();
@@ -130,7 +115,7 @@ class Variable {
   static Future artistToSongsMapLoading;
 
   static generalMapArtistToSong() async {
-    await playListLoading;
+    await playListInitialization;
     artists = await audioQuery.getArtists();
     // Sort artists
     final List<ArtistInfo> _unknownArtists = List();
