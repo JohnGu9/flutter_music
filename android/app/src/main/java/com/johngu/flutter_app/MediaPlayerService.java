@@ -177,7 +177,6 @@ public final class MediaPlayerService extends IntentService
 
     static public MediaPlayerServiceBinder mediaPlayerServiceBinder;
 
-
     public MediaPlayerService() {
         super("MediaPlayerService");
         mediaPlayerServiceBinder = new MediaPlayerServiceBinder();

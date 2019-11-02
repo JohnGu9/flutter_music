@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart' show MethodCall, MethodChannel;
+import 'package:flutter_app/component/CustomValueNotifier.dart';
 
 // MediaPlayer Status
 enum MediaPlayerStatus {
@@ -30,6 +31,7 @@ class MediaPlayer {
       case 'onPrevious':
         onPrevious();
         return null;
+
       case 'onNext':
         onNext();
         return null;
@@ -64,7 +66,7 @@ class MediaPlayer {
         currentDurationNotifier.value = methodCall.arguments;
         currentPositionNotifier.value = 0;
         onPositionChangeListener(currentPosition, currentDuration);
-        onPreparedListener();
+        onPreparedNotifier.notifyListeners();
         return null;
 
       case 'onErrorListener':
@@ -78,20 +80,16 @@ class MediaPlayer {
         int position = methodCall.arguments;
         currentPositionNotifier.value = position;
         onPositionChangeListener(currentPosition, currentDuration);
-        onSeekCompleteListener();
+        onSeekCompleteNotifier.notifyListeners();
         return null;
 
       case 'onCompletionListener':
         _stateUpdate(MediaPlayerStatus.playbackCompleted);
-        onCompletionListener();
+        onCompletionNotifier.notifyListeners();
         return null;
 
       case 'onBufferingUpdateListener':
         onBufferingUpdateListener(methodCall.arguments);
-        return null;
-
-      case 'onPreparedListener':
-        debugPrint(methodCall.arguments.toString());
         return null;
 
       default:
@@ -133,7 +131,12 @@ class MediaPlayer {
       (MediaPlayerStatus state, MediaPlayerStatus preState) =>
           debugPrint('MediaPlayerStatus' + state.toString());
 
-  static MediaPlayerStatus status = MediaPlayerStatus.idle;
+  static final ValueNotifier<MediaPlayerStatus> statusNotifier =
+      ValueNotifier(MediaPlayerStatus.idle);
+
+  static MediaPlayerStatus get status => statusNotifier.value;
+
+  static set status(value) => statusNotifier.value = value;
 
   static void _stateUpdate(MediaPlayerStatus s /*new state*/) async {
     MediaPlayerStatus _preState = status;
@@ -166,6 +169,9 @@ class MediaPlayer {
 
   static Timer positionUpdateTimer;
 
+  static final onPreparedNotifier = CustomValueNotifier(null)
+    ..addListener(() => onPreparedListener());
+
   static void setOnPreparedListener(Function() fun) =>
       // This class always listen OnPrepared to maintain status machine. So no need to invoke method setOnPreparedListener.
       onPreparedListener = fun;
@@ -180,9 +186,15 @@ class MediaPlayer {
       // This class always listen OnError to maintain status machine. So no need to invoke method setOnErrorListener.
       onErrorListener = fun;
 
+  static final onCompletionNotifier = CustomValueNotifier(null)
+    ..addListener(() => onCompletionListener());
+
   static void setOnCompletionListener(Function() fun) =>
       // This class always listen OnCompletion to maintain status machine. So no need to invoke method setOnCompletionListener.
       onCompletionListener = fun;
+
+  static final onSeekCompleteNotifier = CustomValueNotifier(null)
+    ..addListener(() => onSeekCompleteListener());
 
   static void setOnSeekCompleteListener(Function() fun) =>
       onSeekCompleteListener = fun;

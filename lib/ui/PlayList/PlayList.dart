@@ -19,123 +19,6 @@ import 'ArtistViewItem.dart';
 import 'SongTIleArtwork.dart';
 import 'SongViewPage.dart';
 
-_menuButtonSheet(BuildContext context, SongInfo songInfo) {
-  // cache widget
-  final built = _menuButtonSheetBuilder(context, songInfo);
-  Future.microtask(() => showModalBottomSheet(
-        shape: const RoundedRectangleBorder(
-            borderRadius: const BorderRadius.only(
-                topLeft: Constants.radius, topRight: Constants.radius)),
-        context: context,
-        builder: (BuildContext context) => built,
-      ));
-}
-
-_menuButtonSheetBuilder(BuildContext context, SongInfo songInfo) {
-  return Material(
-    color: Theme.of(context).backgroundColor,
-    borderRadius: Constants.borderRadius,
-    child: Wrap(
-      children: <Widget>[
-        const Center(child: const Icon(Icons.remove)),
-        // Info
-        ListTile(
-          title: AutoSizeText(
-            songInfo.title,
-            style: Theme.of(context).textTheme.title,
-            maxLines: 1,
-          ),
-          subtitle: Wrap(
-            alignment: WrapAlignment.start,
-            crossAxisAlignment: WrapCrossAlignment.end,
-            children: <Widget>[
-              Text(
-                songInfo.artist,
-                style: Theme.of(context).textTheme.body1,
-                maxLines: 1,
-              ),
-              const SizedBox(
-                width: 10,
-              ),
-              Text(
-                songInfo.album,
-                style: Theme.of(context).textTheme.body2,
-                maxLines: 1,
-              ),
-            ],
-          ),
-          trailing: ValueListenableBuilder(
-              valueListenable: Variable.favouriteList,
-              builder: (BuildContext context, List list, Widget child) {
-                final bool contains = list.contains(songInfo);
-                // debugPrint('contains:'+contains.toString());
-                final built = AnimatedSwitcher(
-                  duration: Constants.defaultShortDuration,
-                  child: IconButton(
-                    key: ValueKey(contains),
-                    icon:
-                        Icon(contains ? Icons.favorite : Icons.favorite_border),
-                    onPressed: () => onFavorite(songInfo),
-                  ),
-                );
-                return built;
-              }),
-        ),
-        ListTile(
-          leading: const Icon(Icons.insert_drive_file),
-          title: AutoSizeText(
-            songInfo.filePath,
-            style: Theme.of(context).textTheme.body2,
-            maxLines: 2,
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Wrap(
-              direction: Axis.vertical,
-              children: <Widget>[
-                Text(
-                  'Duration: ' +
-                      (int.parse(songInfo.duration) ~/ 1000 ~/ 60).toString() +
-                      ' min ' +
-                      (int.parse(songInfo.duration) ~/ 1000 % 60).toString() +
-                      ' sec ',
-                  style: Theme.of(context).textTheme.body2,
-                ),
-                Text(
-                  'File size: ' +
-                      (int.parse(songInfo.fileSize) / (1024 * 1024))
-                          .toString()
-                          .substring(0, 5) +
-                      'MB',
-                  style: Theme.of(context).textTheme.body2,
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // actions
-        ListTile(
-          leading: const Icon(Icons.share),
-          title: const Text('Share'),
-          onTap: () => Variable.shareSong(songInfo),
-        ),
-        ListTile(
-          leading: const Icon(Icons.delete),
-          title: const Text('Remove'),
-          onTap: () => FeatureUnsupportedDialog(context),
-        ),
-        ListTile(
-          leading: const Icon(Icons.cancel),
-          title: const Text('Cancel'),
-          onTap: () => Navigator.of(context).pop(),
-        ),
-        const Divider(),
-      ],
-    ),
-  );
-}
-
 class PlayList extends StatefulWidget {
   const PlayList({Key key}) : super(key: key);
 
@@ -154,25 +37,26 @@ class _PlayListState extends State<PlayList>
 
     // Start Load PlayList
     final audioQuery = Variable.audioQuery;
-    final List<SongInfo> allSong = await audioQuery.getSongs();
-    allSong.forEach((SongInfo songInfo) {
+    final List<SongInfo> allSongs = await audioQuery.getSongs();
+    List<String> allSongsPath = List();
+    allSongs.forEach((SongInfo songInfo) {
       Variable.filePathToSongMap[songInfo.filePath] = songInfo;
+      allSongsPath.add(songInfo.filePath);
     });
     Variable.library = await database.LinkedList.easeLinkedList<String>(
-        database: Constants.database, table: Constants.libraryTable,drop: true);
+        database: Constants.database,
+        table: Constants.libraryTable,
+        drop: false);
     Variable.favourite = await database.LinkedList.easeLinkedList<String>(
-        database: Constants.database, table: Constants.favouriteTable,drop: true);
+        database: Constants.database,
+        table: Constants.favouriteTable,
+        drop: false);
 
+    Variable.library.sync(allSongsPath);
+    Variable.favourite.sync(allSongsPath, shouldAdd: false);
 
-
-    final defaultListNotifier = Variable.defaultList;
-    final favoriteListNotifier = Variable.favouriteList;
-
-    defaultListNotifier.value = allSong;
-    favoriteListNotifier.value = List();
-    defaultListNotifier.value.forEach((SongInfo songInfo) {
-      Variable.filePathToSongMap[songInfo.filePath] = songInfo;
-    });
+    Variable.libraryNotify.value = Variable.library.list;
+    Variable.favouriteNotify.value = Variable.favourite.list;
     MediaPlayer.volume = 0.5;
 
     await Future.delayed(const Duration(milliseconds: 100));
@@ -394,7 +278,7 @@ class _FavouriteListState extends State<FavouriteList> {
   Widget build(BuildContext context) =>
       // TODO: implement build
       ValueListenableBuilder(
-        valueListenable: Variable.favouriteList,
+        valueListenable: Variable.favouriteNotify,
         builder: (BuildContext context, List list, Widget child) {
           return (list == null) ? child : FavoriteListBuilder(list: list);
         },
@@ -414,7 +298,7 @@ class FavoriteListBuilder extends StatefulWidget {
 
 class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
   static void _onItemTap(BuildContext context, SongInfo songInfo) =>
-      Variable.setCurrentSong(Variable.favouriteList.value, songInfo);
+      Variable.setCurrentSong(Variable.favouriteNotify.value, songInfo.filePath);
 
   static Widget _itemBuilder(BuildContext context, SongInfo songInfo) {
     return ListTile(
@@ -440,17 +324,10 @@ class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
   }
 
   _onReorder(int oldIndex, int newIndex) {
-    final list = Variable.favouriteList.value;
-    if (oldIndex < newIndex) {
-      list.insert(newIndex, list[oldIndex]);
-      list.removeAt(oldIndex);
-    } else {
-      var song = list.removeAt(oldIndex);
-      list.insert(newIndex, song);
-    }
+    Variable.favourite.reorder(oldIndex, newIndex);
     // sync currentListNotifier
-    Variable.favouriteList.notifyListeners();
-    if (list == Variable.currentList.value) {
+    Variable.favouriteNotify.notifyListeners();
+    if (Variable.favouriteNotify.value == Variable.currentList.value) {
       Variable.currentList.notifyListeners();
     }
   }
@@ -469,13 +346,11 @@ class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
                 padding: const EdgeInsets.only(bottom: 120.0),
                 child: Center(child: Icon(Icons.filter_list)),
               ),
-        onDragStart: () async {
-          await Feedback.forLongPress(context);
-          Variable.panelAntiBlock.value = true;
-        },
+        onDragStart: () async => Variable.panelAntiBlock.value = true,
         onDragEnd: () => Variable.panelAntiBlock.value = false,
         children: <Widget>[
-          for (final songInfo in widget.list) _itemBuilder(context, songInfo),
+          for (final String songPath in widget.list)
+            _itemBuilder(context, Variable.filePathToSongMap[songPath]),
         ],
         onReorder: _onReorder,
       );
@@ -486,18 +361,18 @@ class FavouriteListHeader extends StatelessWidget {
 
   _play(int playListSequenceStatus) async {
     Variable.playListSequence.state = playListSequenceStatus;
-    if (Variable.currentList.value == Variable.favouriteList.value) {
+    if (Variable.currentList.value == Variable.favouriteNotify.value) {
       if (MediaPlayer.status != MediaPlayerStatus.started) {
         MediaPlayer.start();
       }
     } else {
       final int index =
           playListSequenceStatus == PlayListSequenceStatus.shuffle.index
-              ? Random().nextInt(Variable.favouriteList.value.length - 1)
+              ? Random().nextInt(Variable.favouriteNotify.value.length - 1)
               : 0;
       MediaPlayer.status = MediaPlayerStatus.started;
       Variable.setCurrentSong(
-          Variable.favouriteList.value, Variable.favouriteList.value[index]);
+          Variable.favouriteNotify.value, Variable.favouriteNotify.value[index]);
     }
   }
 
@@ -548,7 +423,7 @@ class DefaultList extends StatelessWidget {
   Widget build(BuildContext context) =>
       // TODO: implement build
       ValueListenableBuilder(
-        valueListenable: Variable.defaultList,
+        valueListenable: Variable.libraryNotify,
         builder: (BuildContext context, List list, Widget child) {
           return (list == null) ? child : DefaultListBuilder(list: list);
         },
@@ -568,7 +443,7 @@ class DefaultListBuilder extends StatefulWidget {
 
 class _DefaultListBuilderState extends State<DefaultListBuilder> {
   static void _onItemTap(BuildContext context, SongInfo songInfo) =>
-      Variable.setCurrentSong(Variable.defaultList.value, songInfo);
+      Variable.setCurrentSong(Variable.libraryNotify.value, songInfo.filePath);
 
   static Widget _itemBuilder(BuildContext context, SongInfo songInfo) {
     return ListTile(
@@ -591,17 +466,10 @@ class _DefaultListBuilderState extends State<DefaultListBuilder> {
   }
 
   _onReorder(int oldIndex, int newIndex) {
-    final list = Variable.defaultList.value;
-    if (oldIndex < newIndex) {
-      list.insert(newIndex, list[oldIndex]);
-      list.removeAt(oldIndex);
-    } else {
-      var song = list.removeAt(oldIndex);
-      list.insert(newIndex, song);
-    }
+    Variable.library.reorder(oldIndex, newIndex);
     // sync currentListNotifier
-    Variable.defaultList.notifyListeners();
-    if (list == Variable.currentList.value) {
+    Variable.libraryNotify.notifyListeners();
+    if (Variable.libraryNotify.value == Variable.currentList.value) {
       Variable.currentList.notifyListeners();
     }
   }
@@ -620,13 +488,11 @@ class _DefaultListBuilderState extends State<DefaultListBuilder> {
             : const Padding(
                 padding: const EdgeInsets.only(bottom: 120.0),
                 child: Center(child: Icon(Icons.filter_list))),
-        onDragStart: () async {
-          await Feedback.forLongPress(context);
-          Variable.panelAntiBlock.value = true;
-        },
+        onDragStart: () async => Variable.panelAntiBlock.value = true,
         onDragEnd: () => Variable.panelAntiBlock.value = false,
         children: <Widget>[
-          for (final songInfo in widget.list) _itemBuilder(context, songInfo),
+          for (final String songPath in widget.list)
+            _itemBuilder(context, Variable.filePathToSongMap[songPath]),
         ],
         onReorder: _onReorder,
       );
@@ -637,18 +503,18 @@ class DefaultListHeader extends StatelessWidget {
 
   _play(int playListSequenceStatus) async {
     Variable.playListSequence.state = playListSequenceStatus;
-    if (Variable.currentList.value == Variable.defaultList.value) {
+    if (Variable.currentList.value == Variable.libraryNotify.value) {
       if (MediaPlayer.status != MediaPlayerStatus.started) {
         MediaPlayer.start();
       }
     } else {
       final int index =
           playListSequenceStatus == PlayListSequenceStatus.shuffle.index
-              ? Random().nextInt(Variable.defaultList.value.length - 1)
+              ? Random().nextInt(Variable.libraryNotify.value.length - 1)
               : 0;
       MediaPlayer.status = MediaPlayerStatus.started;
       Variable.setCurrentSong(
-          Variable.defaultList.value, Variable.defaultList.value[index]);
+          Variable.libraryNotify.value, Variable.libraryNotify.value[index]);
     }
   }
 
@@ -683,7 +549,7 @@ class DefaultListHeader extends StatelessWidget {
               ],
             ),
             trailing: Text(
-              'All Songs: ' + Variable.defaultList.value.length.toString(),
+              'All Songs: ' + Variable.libraryNotify.value.length.toString(),
               style: Theme.of(context).textTheme.body2,
               maxLines: 1,
             ),
@@ -914,49 +780,5 @@ class _ArtistListState extends State<ArtistList> {
       future: loading,
       builder: _futureBuilder,
     );
-  }
-}
-
-class StandardListTile extends StatefulWidget {
-  const StandardListTile({Key key, this.songInfo, this.child})
-      : super(key: key);
-  final SongInfo songInfo;
-  final Widget child;
-
-  @override
-  _StandardListTileState createState() => _StandardListTileState();
-}
-
-class _StandardListTileState extends State<StandardListTile> {
-  static void _onItemTap(BuildContext context, SongInfo songInfo) {
-    Variable.currentList.value = Variable.defaultList.value;
-    Variable.currentItem.value = songInfo;
-  }
-
-  Widget built;
-
-  @override
-  Widget build(BuildContext context) {
-    // TODO: implement build
-    built ??= ListTile(
-      key: ValueKey(widget.songInfo),
-      title: Text(
-        widget.songInfo.title,
-        style: Theme.of(context).textTheme.body1,
-        maxLines: 2,
-      ),
-      subtitle: Text(
-        widget.songInfo.artist == Constants.unknown
-            ? widget.songInfo.album
-            : widget.songInfo.artist,
-        style: Theme.of(context).textTheme.body2,
-        maxLines: 2,
-      ),
-      onTap: () => _onItemTap(context, widget.songInfo),
-      trailing: IconButton(
-          icon: const Icon(Icons.more_horiz),
-          onPressed: () => _menuButtonSheet(context, widget.songInfo)),
-    );
-    return built;
   }
 }

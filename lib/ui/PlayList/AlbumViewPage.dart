@@ -46,17 +46,17 @@ class _AlbumViewPageState extends State<AlbumViewPage> {
     if (index >= Variable.albumIdToSongsMap[widget.album.id].length) {
       return null;
     }
-    final SongInfo songInfo =
+    final String songInfo =
         Variable.albumIdToSongsMap[widget.album.id][index];
     return ListTile(
       title: AutoSizeText(
-        songInfo.title,
+        Variable.filePathToSongMap[songInfo].title,
         style: Theme.of(context).textTheme.body1,
         maxLines: 1,
       ),
       trailing: IconButton(
           icon: Icon(Icons.more_horiz),
-          onPressed: () => pushSongViewPage(context, songInfo)),
+          onPressed: () => pushSongViewPage(context, Variable.filePathToSongMap[songInfo])),
       onTap: () => Variable.setCurrentSong(
           Variable.albumIdToSongsMap[widget.album.id], songInfo),
     );

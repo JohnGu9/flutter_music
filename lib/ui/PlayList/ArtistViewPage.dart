@@ -137,14 +137,14 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
     if (index >= Variable.artistIdToSongsMap[widget.artist.id].length) {
       return null;
     }
-    final SongInfo songInfo =
+    final String songInfo =
     Variable.artistIdToSongsMap[widget.artist.id][index];
     return ListTile(
       leading: SongTileArtwork(
-        songInfo: songInfo,
+        songInfo: Variable.filePathToSongMap[songInfo],
       ),
       title: AutoSizeText(
-        songInfo.title,
+        Variable.filePathToSongMap[songInfo].title,
         style: Theme
             .of(context)
             .textTheme
@@ -152,7 +152,7 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
         maxLines: 1,
       ),
       subtitle: AutoSizeText(
-        songInfo.album,
+        Variable.filePathToSongMap[songInfo].album,
         style: Theme
             .of(context)
             .textTheme
@@ -161,7 +161,7 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
       ),
       trailing: IconButton(
           icon: Icon(Icons.more_horiz),
-          onPressed: () => pushSongViewPage(context, songInfo)),
+          onPressed: () => pushSongViewPage(context, Variable.filePathToSongMap[songInfo])),
       onTap: () =>
           Variable.setCurrentSong(
               Variable.artistIdToSongsMap[widget.artist.id], songInfo),

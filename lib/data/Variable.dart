@@ -20,17 +20,17 @@ class Variable {
 
   static final CustomValueNotifier<List> currentList =
       CustomValueNotifier(null);
-  static final CustomValueNotifier<SongInfo> currentItem =
+  static final CustomValueNotifier<String> currentItem =
       CustomValueNotifier(null);
 
-  static final CustomValueNotifier<List<SongInfo>> defaultList =
+  static final CustomValueNotifier<List<String>> libraryNotify =
       CustomValueNotifier(null);
-  static final CustomValueNotifier<List<SongInfo>> favouriteList =
+  static final CustomValueNotifier<List<String>> favouriteNotify =
       CustomValueNotifier(null);
 
-  static setCurrentSong(List<SongInfo> songList, SongInfo songInfo) async {
+  static setCurrentSong(List<String> songList, String songInfo) async {
     // Alarm: songInfo must be come from filePathToSongMap
-    assert(filePathToSongMap.containsValue(songInfo));
+    assert(filePathToSongMap.containsKey(songInfo));
     // Prevent update currentItem while pageRoute is in transition.
     // Warning: if update currentItem while pageRoute is in transition, it will cause Hero widget break down.
     beforeSetCurrentSong();
@@ -72,9 +72,9 @@ class Variable {
   static Future playListInitialization;
 
   static final filePathToSongMap = Map<String, SongInfo>();
-  static final albumIdToSongsMap = Map<String, List<SongInfo>>();
+  static final albumIdToSongsMap = Map<String, List<String>>();
   static final albumIdToImageMap = Map<String, ImageProvider>();
-  static final artistIdToSongsMap = Map<String, List<SongInfo>>();
+  static final artistIdToSongsMap = Map<String, List<String>>();
   static final artistIdToImagesMap = Map<String, List<ImageProvider>>();
   static List<AlbumInfo> albums;
   static List<ArtistInfo> artists;
@@ -97,12 +97,13 @@ class Variable {
     }
     for (int i = 0; i < albums.length;) {
       final AlbumInfo albumInfo = albums[i];
-      final List<SongInfo> songs =
+      final List<SongInfo> songInfos =
           await audioQuery.getSongsFromAlbum(album: albumInfo);
-      for (int i = 0; i < songs.length; i++) {
-        songs[i] = filePathToSongMap[songs[i].filePath];
+      List<String> songs = List();
+      for (int i = 0; i < songInfos.length; i++) {
+        songs.add(songInfos[i].filePath);
       }
-      if (songs.length > 0) {
+      if (songInfos.length > 0) {
         albumIdToSongsMap[albumInfo.id] = songs;
         i++;
       } else {
@@ -135,12 +136,13 @@ class Variable {
     for (int i = 0; i < artists.length;) {
       await SchedulerBinding.instance.endOfFrame;
       final ArtistInfo artistInfo = artists[i];
-      final List<SongInfo> songs =
+      final List<SongInfo> songInfos =
           await audioQuery.getSongsFromArtist(artist: artistInfo);
-      for (int i = 0; i < songs.length; i++) {
-        songs[i] = Variable.filePathToSongMap[songs[i].filePath];
+      List<String> songs = List();
+      for (int i = 0; i < songInfos.length; i++) {
+        songs.add(songInfos[i].filePath);
       }
-      if (songs.length > 0) {
+      if (songInfos.length > 0) {
         Variable.artistIdToSongsMap[artistInfo.id] = songs;
         i++;
       } else {
@@ -151,11 +153,11 @@ class Variable {
   }
 
   // load single image from songs list
-  static Future<ImageProvider> getImageFromSongs(List<SongInfo> songs) async {
-    for (final SongInfo songInfo in songs) {
+  static Future<ImageProvider> getImageFromSongs(List<String> songs) async {
+    for (final String songPath in songs) {
       await SchedulerBinding.instance.endOfFrame;
       final ImageProvider image =
-          await Variable.getArtworkAsync(path: songInfo.filePath);
+          await Variable.getArtworkAsync(path: songPath);
       if (image != null) {
         return image;
       }
@@ -165,12 +167,12 @@ class Variable {
 
   // load multi image from songs list
   static Future<List<ImageProvider>> getImagesFromSongs(
-      List<SongInfo> songs) async {
+      List<String> songs) async {
     final list = List<ImageProvider>();
-    for (final SongInfo songInfo in songs) {
+    for (final String songPath in songs) {
       await SchedulerBinding.instance.endOfFrame;
       final ImageProvider image =
-          await Variable.getArtworkAsync(path: songInfo.filePath);
+          await Variable.getArtworkAsync(path: songPath);
       if (image != null) {
         list.add(image);
       }
@@ -214,58 +216,59 @@ class Variable {
 
 bool _updating = false;
 
-void onFavorite(SongInfo songInfo) async {
-  if (songInfo == null || _updating) {
+void onFavorite(String songPath) async {
+  if (songPath == null || _updating) {
     return;
   }
 
-  final favouriteList = Variable.favouriteList;
   final currentListNotifier = Variable.currentList;
   final currentItemNotifier = Variable.currentItem;
 
-  int index = favouriteList.value.indexOf(songInfo);
-  if (currentListNotifier.value == favouriteList.value) {
-    if (currentItemNotifier.value == songInfo) {
+  int index = Variable.favourite.indexOf(songPath);
+  if (currentListNotifier.value == Variable.favourite.list) {
+    if (currentItemNotifier.value == songPath) {
       // remove currentItem
       if (index == -1) {
         return;
       }
-      final List<SongInfo> newList = List.from(favouriteList.value);
-      newList.removeAt(index);
-      favouriteList.value = newList;
-      if (newList.length == 0) {
+      final List<String> newList = List.from(Variable.favouriteNotify.value);
+      currentListNotifier.value = newList;
+      Variable.favourite.removeAt(index);
+      Variable.favouriteNotify.notifyListeners();
+      if (Variable.favouriteNotify.value.length == 0) {
         currentItemNotifier.value = null;
-        currentListNotifier.value = newList;
+        currentListNotifier.value = Variable.favouriteNotify.value;
       } else {
-        if (index == newList.length) {
+        if (index == Variable.favouriteNotify.value.length) {
           // When delete the last song
           index -= 1;
         }
-        currentItemNotifier.value = newList[index];
+        await Future.delayed(const Duration(milliseconds: 50));
+        currentItemNotifier.value = Variable.favourite[index];
         _updating = true;
         await Future.delayed(Constants.defaultDuration);
-        currentListNotifier.value = newList;
-        await Future.delayed(Duration(milliseconds: 50));
+        currentListNotifier.value = Variable.favouriteNotify.value;
+        await Future.delayed(const Duration(milliseconds: 50));
         _updating = false;
       }
     } else {
       if (index == -1) {
-        favouriteList.value.insert(0, songInfo);
+        Variable.favourite.insert(0, songPath);
       } else {
-        favouriteList.value.removeAt(index);
+        Variable.favourite.removeAt(index);
       }
       // update both list
-      favouriteList.notifyListeners();
+      Variable.favouriteNotify.notifyListeners();
       currentListNotifier.notifyListeners();
     }
   } else {
     if (index == -1) {
-      favouriteList.value.insert(0, songInfo);
+      Variable.favourite.insert(0, songPath);
     } else {
-      favouriteList.value.removeAt(index);
+      Variable.favourite.removeAt(index);
     }
     // update favouriteList
-    favouriteList.notifyListeners();
+    Variable.favouriteNotify.notifyListeners();
   }
 }
 

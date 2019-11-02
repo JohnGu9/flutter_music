@@ -4,15 +4,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'data/Constants.dart';
-import 'data/Database.dart';
 import 'data/Variable.dart';
 import 'plugin/ExtendPlugin.dart';
 import 'plugin/MediaPlayer.dart';
 import 'ui/Panel/Panel.dart';
 import 'ui/PlayList/PlayList.dart';
 
-void main()async {
-  await testDb();
+void main() async {
   Variable.mediaPlayerInitialization = mediaPlayerSetup();
   runApp(const MyApp());
 }
@@ -32,8 +30,8 @@ mediaPlayerSetup() async {
           : MediaPlayer.removeOnPreparedListener();
     }
   };
-  final _currentItemChanged = () async =>
-      MediaPlayer.setDataSource(Variable.currentItem.value?.filePath);
+  final _currentItemChanged =
+      () async => MediaPlayer.setDataSource(Variable.currentItem.value);
   Variable.currentItem.addListener(_currentItemChanged);
 
   MediaPlayer.setOnStateChangeListener((state, preState) {
@@ -133,9 +131,9 @@ mediaPlayerSetup() async {
     Variable.setCurrentSong(list.value, list.value[index]);
   };
   MediaPlayer.getSongInfo = () => [
-        Variable.currentItem.value.title,
-        Variable.currentItem.value.artist,
-        Variable.currentItem.value.album
+        Variable.filePathToSongMap[Variable.currentItem.value].title,
+        Variable.filePathToSongMap[Variable.currentItem.value].artist,
+        Variable.filePathToSongMap[Variable.currentItem.value].album,
       ];
 
   return;
@@ -148,8 +146,7 @@ class MyApp extends StatefulWidget {
   _MyAppState createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp>
-    with SingleTickerProviderStateMixin {
+class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     // TODO: implement initState

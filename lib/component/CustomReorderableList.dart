@@ -388,6 +388,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
 
     // Starts dragging toWrap.
     void onDragStarted() {
+      Feedback.forLongPress(context);
       setState(() {
         _dragging = toWrap.key;
         _dragStartIndex = index;

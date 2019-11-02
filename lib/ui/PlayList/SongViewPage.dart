@@ -168,22 +168,22 @@ class _SongViewPageState extends State<SongViewPage> {
                                         ],
                                       ),
                                       trailing: ValueListenableBuilder(
-                                        valueListenable: Variable.favouriteList,
+                                        valueListenable: Variable.favouriteNotify,
                                         builder: (BuildContext context,
                                             List list, Widget child) {
                                           final bool contains =
-                                              list.contains(widget.songInfo);
-                                          // debugPrint('contains:'+contains.toString());
+                                              list.contains(widget.songInfo.filePath);
+//                                           debugPrint('contains:'+contains.toString());
                                           return AnimatedSwitcher(
                                             duration:
-                                                Constants.defaultShortDuration,
+                                                Constants.defaultDuration,
                                             child: IconButton(
                                               key: ValueKey(contains),
                                               icon: Icon(contains
                                                   ? Icons.favorite
                                                   : Icons.favorite_border),
                                               onPressed: () =>
-                                                  onFavorite(widget.songInfo),
+                                                  onFavorite(widget.songInfo.filePath),
                                             ),
                                           );
                                         },
@@ -248,8 +248,8 @@ class _SongViewPageState extends State<SongViewPage> {
                                                 MediaPlayer.status =
                                                     MediaPlayerStatus.started;
                                                 await Variable.setCurrentSong(
-                                                  Variable.defaultList.value,
-                                                  widget.songInfo,
+                                                  Variable.libraryNotify.value,
+                                                  widget.songInfo.filePath,
                                                 );
                                               },
                                               child: Padding(

@@ -3,31 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
-testDb() async {
-  final LinkedList linkedList = await LinkedList.easeLinkedList<String>(
-      database: 'test', table: 'test', drop: true);
-//  linkedList.add('john0');
-//  linkedList.add('john1');
-//  linkedList.add('john2');
-
-  linkedList.addAll(['john0', 'john2']);
-  linkedList.insertAll(['john3', 'john4']);
-  linkedList.sync([
-    'john0',
-    'john1',
-    'john2',
-    'john3',
-  ]);
-
-//  linkedList.insert(0, 'john3');
-//  linkedList.insert(0, 'john4');
-//  linkedList.insert(0, 'john5');
-
-//  await linkedList.removeAt(2);
-
-  print(linkedList.list);
-  print(await linkedList.getMap);
-  return;
+testDb()async{
+  final LinkedList list = await LinkedList.easeLinkedList<String>(database: 'test', table: 'test',drop: true);
+  list.addAll(['john0',]);
 }
 
 class DatabaseKey<T> {
@@ -316,22 +294,22 @@ class LinkedList<T> {
     return res;
   }
 
-  reorder(int oldIndex, int newIndex) {
+  indexOf(T element) => list.indexOf(element);
+
+  reorder(int oldIndex, int newIndex)async {
     if (oldIndex == newIndex) {
       return;
     } else if (oldIndex < newIndex) {
-      insert(newIndex, list[oldIndex]);
-      removeAt(oldIndex);
+      insert(newIndex - 1, removeAt(oldIndex));
     } else {
-      final value = removeAt(oldIndex);
-      insert(newIndex, value);
+      insert(newIndex, removeAt(oldIndex));
     }
   }
 
   sync(
     Iterable iterable, {
     bool shouldAdd =
-        true, //whether add the element that don't exist in the list
+        true, //whether add the element that don't exist in the list, if false, just delete elements not add elements
     Function
         compareSubElement, // control what sub element in class should be compare
     Function shouldUpdate, // callback once detect distinct
@@ -681,11 +659,9 @@ class SQLiteLinkedList<T> {
       return;
     }
     if (oldIndex < newIndex) {
-      T value = await removeAt(oldIndex);
-      await insert(newIndex - 1, value);
+      await insert(newIndex - 1, await removeAt(oldIndex));
     } else {
-      T value = await removeAt(oldIndex);
-      await insert(newIndex, value);
+      await insert(newIndex, await removeAt(oldIndex));
     }
   }
 }

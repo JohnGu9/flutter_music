@@ -37,7 +37,7 @@ class _ArtistViewItemState extends State<ArtistViewItem> {
     _images = List();
     final albums =
         await Variable.audioQuery.getAlbumsFromArtist(artist: widget.artist);
-    final allSongs = List<SongInfo>.from(Variable.artistIdToSongsMap[widget.artist.id]);
+    final allSongs = List<String>.from(Variable.artistIdToSongsMap[widget.artist.id]);
     bool loadMore = true;
 
     for (final album in albums) {
