@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
+
 import '../../data/Constants.dart';
 import '../../data/Variable.dart';
 
@@ -12,29 +14,46 @@ class SongTileArtwork extends StatefulWidget {
 }
 
 class _SongTileArtworkState extends State<SongTileArtwork> {
-  ImageProvider imageProvider;
+  ImageProvider image;
 
-  _loadImage() {
-    if (Variable.filePathToImageMap.containsKey(widget.songInfo.filePath)) {
-      imageProvider = Variable.filePathToImageMap[widget.songInfo.filePath];
-    } else {
-      _loadImageAsync();
+  _loadImageAsync() async {
+    image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
+    await SchedulerBinding.instance.endOfFrame;
+    if (mounted) {
+      setState(() {});
     }
   }
 
-  _loadImageAsync() async {
-    imageProvider =
-        await Variable.getArtworkAsync(path: widget.songInfo.filePath);
-    if(mounted){
+  @override
+  void didUpdateWidget(SongTileArtwork oldWidget) {
+    // TODO: implement didUpdateWidget
+    if (widget.songInfo != oldWidget.songInfo) {
+      Variable.filePathToImageMap[oldWidget.songInfo?.filePath]
+          ?.removeListener(_loadImageAsync);
+      image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
+      Variable.filePathToImageMap[widget.songInfo.filePath]
+          .addListener(_loadImageAsync);
       setState(() {});
     }
+    super.didUpdateWidget(oldWidget);
   }
 
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    _loadImage();
+    Variable.getArtworkAsync(path: widget.songInfo.filePath);
+    image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
+    Variable.filePathToImageMap[widget.songInfo.filePath]
+        .addListener(_loadImageAsync);
+  }
+
+  @override
+  void dispose() {
+    // TODO: implement dispose
+    Variable.filePathToImageMap[widget.songInfo.filePath]
+        .removeListener(_loadImageAsync);
+    super.dispose();
   }
 
   @override
@@ -47,10 +66,10 @@ class _SongTileArtworkState extends State<SongTileArtwork> {
         shape: RoundedRectangleBorder(borderRadius: Constants.borderRadius),
         child: AnimatedSwitcher(
           duration: Constants.defaultDuration,
-          child: imageProvider == null
+          child: image == null
               ? Constants.emptyArtwork
               : Image(
-                  image: imageProvider,
+                  image: image,
                   fit: BoxFit.cover,
                 ),
         ),
@@ -58,4 +77,3 @@ class _SongTileArtworkState extends State<SongTileArtwork> {
     );
   }
 }
-

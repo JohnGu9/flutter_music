@@ -2,11 +2,14 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:auto_size_text/auto_size_text.dart';
+import 'package:connectivity/connectivity.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_app/data/Database.dart' as database;
+import 'package:flutter_app/plugin/ExtendPlugin.dart';
+import 'package:flutter_app/plugin/MediaMetadataRetriever.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 
 import '../../component/AnimatedPopUpWidget.dart';
@@ -40,8 +43,10 @@ class _PlayListState extends State<PlayList>
     final List<SongInfo> allSongs = await audioQuery.getSongs();
     List<String> allSongsPath = List();
     allSongs.forEach((SongInfo songInfo) {
-      Variable.filePathToSongMap[songInfo.filePath] = songInfo;
-      allSongsPath.add(songInfo.filePath);
+      if (int.parse(songInfo.duration) > Variable.durationThreshold.value) {
+        Variable.filePathToSongMap[songInfo.filePath] = songInfo;
+        allSongsPath.add(songInfo.filePath);
+      }
     });
     Variable.library = await database.LinkedList.easeLinkedList<String>(
         database: Constants.database,
@@ -52,12 +57,55 @@ class _PlayListState extends State<PlayList>
         table: Constants.favouriteTable,
         drop: false);
 
-    Variable.library.sync(allSongsPath);
+    Variable.library.sync(allSongsPath, shouldAdd: true);
     Variable.favourite.sync(allSongsPath, shouldAdd: false);
 
     Variable.libraryNotify.value = Variable.library.list;
     Variable.favouriteNotify.value = Variable.favourite.list;
     MediaPlayer.volume = 0.5;
+
+    Variable.cacheRemotePicture = await database.Table.easeTable(
+        database: Constants.database,
+        table: Constants.cacheRemotePictureTable,
+        primaryKey: Variable.cacheRemotePicturePrimaryKey,
+        keys: Variable.cacheRemotePictureKeys,
+        drop: false);
+
+    MediaMetadataRetriever.getRemotePictureCallback.addListener(() {
+      if (MediaMetadataRetriever.remotePictureData != null) {
+        Variable.filePathToImageMap[MediaMetadataRetriever.remotePicturePath]
+            .value = MemoryImage(MediaMetadataRetriever.remotePictureData);
+        Map<String, dynamic> map = Map();
+        map[Variable.cacheRemotePicturePrimaryKey.keyName] =
+            MediaMetadataRetriever.remotePicturePath;
+        map[Variable.cacheRemotePictureKeys[0].keyName] =
+            MediaMetadataRetriever.remotePictureData;
+        Variable.cacheRemotePicture.setData(map);
+      }
+      if (MediaMetadataRetriever.remotePicturePath ==
+          Variable.currentItem.value) {
+        final SongInfo songInfo =
+            Variable.filePathToSongMap[Variable.currentItem.value];
+        MediaPlayer.updateNotification(songInfo.title, songInfo.artist,
+            songInfo.album, MediaMetadataRetriever.remotePictureData);
+      }
+    });
+
+    /// network status check
+    final connectivity = Connectivity();
+    final result = await connectivity.checkConnectivity();
+    if (result == ConnectivityResult.wifi) {
+      Variable.shouldGetRemotePicture = true;
+    } else {
+      Variable.shouldGetRemotePicture = false;
+    }
+    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      if (result == ConnectivityResult.wifi) {
+        Variable.shouldGetRemotePicture = true;
+      } else {
+        Variable.shouldGetRemotePicture = false;
+      }
+    });
 
     await Future.delayed(const Duration(milliseconds: 100));
     Variable.panelAntiBlock.value = false;
@@ -134,10 +182,7 @@ class _PlayListState extends State<PlayList>
   }
 
   void _test(BuildContext context) {
-    Variable.innerScrollController?.animateTo(
-        Variable.innerScrollController.position.maxScrollExtent,
-        duration: Constants.defaultDuration,
-        curve: Curves.fastOutSlowIn);
+    ExtendPlugin.test();
   }
 
   @override
@@ -298,7 +343,8 @@ class FavoriteListBuilder extends StatefulWidget {
 
 class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
   static void _onItemTap(BuildContext context, SongInfo songInfo) =>
-      Variable.setCurrentSong(Variable.favouriteNotify.value, songInfo.filePath);
+      Variable.setCurrentSong(
+          Variable.favouriteNotify.value, songInfo.filePath);
 
   static Widget _itemBuilder(BuildContext context, SongInfo songInfo) {
     return ListTile(
@@ -371,8 +417,8 @@ class FavouriteListHeader extends StatelessWidget {
               ? Random().nextInt(Variable.favouriteNotify.value.length - 1)
               : 0;
       MediaPlayer.status = MediaPlayerStatus.started;
-      Variable.setCurrentSong(
-          Variable.favouriteNotify.value, Variable.favouriteNotify.value[index]);
+      Variable.setCurrentSong(Variable.favouriteNotify.value,
+          Variable.favouriteNotify.value[index]);
     }
   }
 

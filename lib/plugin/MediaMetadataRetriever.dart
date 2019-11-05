@@ -7,7 +7,7 @@ import '../component/CustomValueNotifier.dart';
 
 class MediaMetadataRetriever {
   // ignore: non_constant_identifier_names
-  static final MethodChannel MediaMetadataRetrieverCHANNEL =
+  static final MethodChannel MediaMetadataRetrieverChannel =
       MethodChannel('MMR')..setMethodCallHandler(methodCallHandler);
 
   static Future<dynamic> methodCallHandler(MethodCall methodCall) async {
@@ -17,7 +17,6 @@ class MediaMetadataRetriever {
         List palette = methodCall.arguments;
         String path = palette[index++];
         if (palette.length == index) {
-//          debugPrint('Palette is null');
         } else {
           List<Color> colors = List<Color>();
           for (; index < palette.length; index++) {
@@ -26,12 +25,27 @@ class MediaMetadataRetriever {
           }
           filePathToPaletteMap[path].value = colors;
         }
-//        debugPrint(filePathToPaletteMap[path].value.toString());
+        break;
+
+      case 'getRemotePicture':
+        List arguments = methodCall.arguments;
+        remotePicturePath = arguments[PicturePath];
+        remotePictureData = arguments[PictureData];
+        filePathToRemotePictureMap[remotePicturePath] = remotePictureData;
+        getRemotePictureCallback.notifyListeners();
         break;
       default:
     }
     return null;
   }
+
+  static const PicturePath = 0;
+  static const PictureData = 1;
+  static String remotePicturePath;
+  static Uint8List remotePictureData;
+  static CustomValueNotifier getRemotePictureCallback =
+      CustomValueNotifier(null);
+  static final filePathToRemotePictureMap = Map<String, Uint8List>();
 
   static final filePathToPaletteRequiredMap = Map<String, bool>();
   static final filePathToPaletteMap =
@@ -69,17 +83,43 @@ class MediaMetadataRetriever {
       255, (rgb & 16711680) >> 16, (rgb & 65280) >> 8, (rgb & 255));
 
   // raw api async
-  static Future<ImageProvider> getEmbeddedPicture(String path) async {
-    filePathToPaletteMap[path] ??= CustomValueNotifier(null);
+  static Future<ImageProvider> getEmbeddedPicture(String filePath) async {
+    filePathToPaletteMap[filePath] ??= CustomValueNotifier(null);
     return Future.microtask(() async {
-      final Uint8List list = await MediaMetadataRetrieverCHANNEL.invokeMethod(
+      final Uint8List list = await MediaMetadataRetrieverChannel.invokeMethod(
           'getEmbeddedPicture', {
-        'path': path,
-        'palette': !filePathToPaletteRequiredMap.containsKey(path)
+        'filePath': filePath,
       });
-      filePathToPaletteRequiredMap[path] = true;
-
       return list == null ? null : MemoryImage(list);
+    });
+  }
+
+  /// additional function
+  /// getRemotePicture: search image from internet
+  /// Warning: This function don't return any result
+  ///  [getRemotePictureCallback] will notify when java return result
+  ///  Results are [remotePicturePath] and [remotePictureData] but data will be sweeped when new data return from java!
+  ///  [filePathToRemotePictureMap] will keep the data forever
+  static void getRemotePicture(
+      String filePath, String artist, String title, String duration) {
+    filePathToPaletteMap[filePath] ??= CustomValueNotifier(null);
+    MediaMetadataRetrieverChannel.invokeMethod('getRemotePicture', {
+      'filePath': filePath,
+      'artist': artist,
+      'title': title,
+      'duration': duration,
+    });
+    filePathToPaletteRequiredMap[filePath] = true;
+  }
+
+  /// additional function
+  /// Warning: This function don't return any result
+  static void getPalette(String filePath, Uint8List artwork) {
+    assert(artwork != null);
+    filePathToPaletteMap[filePath] ??= CustomValueNotifier(null);
+    MediaMetadataRetrieverChannel.invokeMethod('getPalette', {
+      'filePath': filePath,
+      'artwork': artwork,
     });
   }
 }

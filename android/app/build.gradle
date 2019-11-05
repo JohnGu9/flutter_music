@@ -24,28 +24,46 @@ if (flutterVersionName == null) {
 apply plugin: 'com.android.application'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
+def keystorePropertiesFile = rootProject.file("key.properties")
+def keystoreProperties = new Properties()
+keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+
 android {
 	compileSdkVersion 28
 
 	lintOptions {
 		disable 'InvalidPackage'
+		checkReleaseBuilds false
+		// Or, if you prefer, you can continue to check for errors in release builds,
+		// but continue the build even when errors are found:
+//		abortOnError false
 	}
 
 	defaultConfig {
 		// TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
 		applicationId "com.johngu.flutter_app"
-		minSdkVersion 16
+		minSdkVersion 24
 		targetSdkVersion 28
 		versionCode flutterVersionCode.toInteger()
 		versionName flutterVersionName
 		testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 	}
 
+	signingConfigs {
+		release {
+			keyAlias keystoreProperties['keyAlias']
+			keyPassword keystoreProperties['keyPassword']
+			storeFile file(keystoreProperties['storeFile'])
+			storePassword keystoreProperties['storePassword']
+		}
+	}
+
 	buildTypes {
 		release {
 			// TODO: Add your own signing config for the release build.
 			// Signing with the debug keys for now, so `flutter run --release` works.
-			signingConfig signingConfigs.debug
+			signingConfig signingConfigs.release
+
 		}
 	}
 }
@@ -58,5 +76,11 @@ dependencies {
 	testImplementation 'junit:junit:4.12'
 	androidTestImplementation 'androidx.test.ext:junit:1.1.1'
 	androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+
+	implementation 'com.google.code.findbugs:jsr305:3.0.2'
+
 	implementation group: 'androidx.palette', name: 'palette', version: '1.0.0'
+	implementation 'com.android.volley:volley:1.1.1'
+	implementation ('fm.last:coverartarchive-api:2.1.1'){ exclude group: 'com.google.android' }
+	implementation (group: 'org.slf4j', name: 'slf4j-nop', version: '1.7.28'){ exclude group: 'com.google.android' }
 }

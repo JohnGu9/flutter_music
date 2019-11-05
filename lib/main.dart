@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_audio_query/flutter_audio_query.dart';
 
 import 'data/Constants.dart';
 import 'data/Variable.dart';
@@ -30,8 +31,7 @@ mediaPlayerSetup() async {
           : MediaPlayer.removeOnPreparedListener();
     }
   };
-  final _currentItemChanged =
-      () async => MediaPlayer.setDataSource(Variable.currentItem.value);
+
   Variable.currentItem.addListener(_currentItemChanged);
 
   MediaPlayer.setOnStateChangeListener((state, preState) {
@@ -42,60 +42,6 @@ mediaPlayerSetup() async {
             .animateTo(0.0, curve: Curves.fastOutSlowIn);
   });
 
-  final _onCompletionListener = () async {
-    final state = Variable.playListSequence.getState();
-    if (state == PlayListSequenceStatus.shuffle) {
-      final list = Variable.currentList;
-      final item = Variable.currentItem;
-      if (list.value == null ||
-          list.value.length == 0 ||
-          item.value == null ||
-          !list.value.contains(item.value)) {
-        return;
-      }
-      if (list.value.length == 1) {
-        MediaPlayer.start();
-      } else {
-        _shouldUpdatePreparedListener = false;
-        MediaPlayer.setOnPreparedListener(MediaPlayer.start);
-        Random _random = Random();
-        int _randomNum;
-
-        int _currentIndex = list.value.indexOf(item.value);
-        do {
-          _randomNum = _random.nextInt(list.value.length - 1);
-        } while (_randomNum == _currentIndex);
-        await Variable.setCurrentSong(list.value, list.value[_randomNum]);
-        _shouldUpdatePreparedListener = true;
-      }
-    } else if (state == PlayListSequenceStatus.repeat_one) {
-      MediaPlayer.start();
-    } else {
-      // skipNext
-
-      final list = Variable.currentList;
-      final item = Variable.currentItem;
-      if (list.value == null ||
-          list.value.length == 0 ||
-          item.value == null ||
-          !list.value.contains(item.value)) {
-        return;
-      }
-
-      if (list.value.length == 1) {
-        MediaPlayer.start();
-      } else {
-        int index = list.value.indexOf(item.value) + 1;
-        _shouldUpdatePreparedListener = false;
-        MediaPlayer.setOnPreparedListener(MediaPlayer.start);
-        if (index >= list.value.length) {
-          index = 0;
-        }
-        await Variable.setCurrentSong(list.value, list.value[index]);
-        _shouldUpdatePreparedListener = true;
-      }
-    }
-  };
   MediaPlayer.setOnCompletionListener(_onCompletionListener);
 
   MediaPlayer.onPrevious = () {
@@ -130,13 +76,73 @@ mediaPlayerSetup() async {
     }
     Variable.setCurrentSong(list.value, list.value[index]);
   };
-  MediaPlayer.getSongInfo = () => [
-        Variable.filePathToSongMap[Variable.currentItem.value].title,
-        Variable.filePathToSongMap[Variable.currentItem.value].artist,
-        Variable.filePathToSongMap[Variable.currentItem.value].album,
-      ];
 
   return;
+}
+
+_currentItemChanged() async {
+  String path = Variable.currentItem.value;
+  MediaPlayer.setDataSource(path);
+  await Variable.getArtworkAsync(path: path);
+  SongInfo songInfo = Variable.filePathToSongMap[path];
+  MemoryImage image = Variable.filePathToImageMap[path].value;
+  await MediaPlayer.updateNotification(
+      songInfo.title, songInfo.artist, songInfo.album, image?.bytes);
+}
+
+_onCompletionListener() async {
+  final state = Variable.playListSequence.getState();
+  if (state == PlayListSequenceStatus.shuffle) {
+    final list = Variable.currentList;
+    final item = Variable.currentItem;
+    if (list.value == null ||
+        list.value.length == 0 ||
+        item.value == null ||
+        !list.value.contains(item.value)) {
+      return;
+    }
+    if (list.value.length == 1) {
+      MediaPlayer.start();
+    } else {
+      _shouldUpdatePreparedListener = false;
+      MediaPlayer.setOnPreparedListener(MediaPlayer.start);
+      Random _random = Random();
+      int _randomNum;
+
+      int _currentIndex = list.value.indexOf(item.value);
+      do {
+        _randomNum = _random.nextInt(list.value.length - 1);
+      } while (_randomNum == _currentIndex);
+      await Variable.setCurrentSong(list.value, list.value[_randomNum]);
+      _shouldUpdatePreparedListener = true;
+    }
+  } else if (state == PlayListSequenceStatus.repeat_one) {
+    MediaPlayer.start();
+  } else {
+    // skipNext
+
+    final list = Variable.currentList;
+    final item = Variable.currentItem;
+    if (list.value == null ||
+        list.value.length == 0 ||
+        item.value == null ||
+        !list.value.contains(item.value)) {
+      return;
+    }
+
+    if (list.value.length == 1) {
+      MediaPlayer.start();
+    } else {
+      int index = list.value.indexOf(item.value) + 1;
+      _shouldUpdatePreparedListener = false;
+      MediaPlayer.setOnPreparedListener(MediaPlayer.start);
+      if (index >= list.value.length) {
+        index = 0;
+      }
+      await Variable.setCurrentSong(list.value, list.value[index]);
+      _shouldUpdatePreparedListener = true;
+    }
+  }
 }
 
 class MyApp extends StatefulWidget {

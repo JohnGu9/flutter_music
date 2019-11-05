@@ -47,24 +47,8 @@ class Artwork extends StatefulWidget {
 class _ArtworkState extends State<Artwork> {
   ImageProvider image;
 
-  @override
-  void initState() {
-    // TODO: implement initState
-    super.initState();
-    _loadImage();
-  }
-
-  _loadImage() {
-    if (widget.songInfo == null) {
-      return;
-    }
-    Variable.filePathToImageMap.containsKey(widget.songInfo.filePath)
-        ? image = Variable.filePathToImageMap[widget.songInfo.filePath]
-        : _loadImageAsync();
-  }
-
   _loadImageAsync() async {
-    image = await Variable.getArtworkAsync(path: widget.songInfo.filePath);
+    image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
     await SchedulerBinding.instance.endOfFrame;
     if (mounted) {
       setState(() {});
@@ -72,6 +56,40 @@ class _ArtworkState extends State<Artwork> {
   }
 
   static _onTap() {}
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    if (widget.songInfo != null) {
+      Variable.getArtworkAsync(path: widget.songInfo.filePath);
+      image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
+      Variable.filePathToImageMap[widget.songInfo.filePath]
+          .addListener(_loadImageAsync);
+    }
+  }
+
+  @override
+  void didUpdateWidget(Artwork oldWidget) {
+    // TODO: implement didUpdateWidget
+    super.didUpdateWidget(oldWidget);
+    if (widget.songInfo != oldWidget.songInfo) {
+      Variable.filePathToImageMap[oldWidget.songInfo?.filePath]
+          ?.removeListener(_loadImageAsync);
+      image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
+      Variable.filePathToImageMap[widget.songInfo.filePath]
+          .addListener(_loadImageAsync);
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    // TODO: implement dispose
+    Variable.filePathToImageMap[widget.songInfo?.filePath]
+        ?.removeListener(_loadImageAsync);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +135,7 @@ class HeroTitle extends StatelessWidget {
     return Hero(
       tag: songInfo.hashCode.toString() + 'title',
       transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.fromHeroPriorityFlightShuttleBuilder,
+      flightShuttleBuilder: Constants.optimizeFlightShuttleBuilder,
       child: FittedBox(
         fit: BoxFit.contain,
         child: Text(
@@ -140,6 +158,7 @@ class HeroArtist extends StatelessWidget {
     return Hero(
       tag: songInfo.hashCode.toString() + 'artist',
       transitionOnUserGestures: true,
+      flightShuttleBuilder: Constants.optimizeFlightShuttleBuilder,
       child: FittedBox(
         fit: BoxFit.contain,
         child: Text(
@@ -891,6 +910,7 @@ class _ColorfulBackgroundState extends State<ColorfulBackground> {
       oldWidget.colorsListenable.removeListener(_valueChanged);
       value = widget.colorsListenable.value;
       widget.colorsListenable.addListener(_valueChanged);
+      setState(() {});
     }
     super.didUpdateWidget(oldWidget);
   }
@@ -909,6 +929,45 @@ class _ColorfulBackgroundState extends State<ColorfulBackground> {
   }
 
   static const opacity = 0.3;
+
+  static List<Color> genColors(BuildContext context, List<Color> colors) =>
+      Theme.of(context).brightness == Brightness.light
+          ? [
+              Color.alphaBlend(
+                  (MediaMetadataRetriever.getLightColor(colors))
+                      .withOpacity(opacity),
+                  Theme.of(context).backgroundColor),
+              Color.alphaBlend(
+                  colors[MediaMetadataRetriever.DominantColor]
+                      .withOpacity(opacity),
+                  Theme.of(context).backgroundColor),
+              Color.alphaBlend(
+                  colors[MediaMetadataRetriever.DominantColor]
+                      .withOpacity(opacity),
+                  Theme.of(context).backgroundColor),
+              Color.alphaBlend(
+                  (MediaMetadataRetriever.getDarkColor(colors))
+                      .withOpacity(opacity),
+                  Theme.of(context).backgroundColor),
+            ]
+          : [
+              Color.alphaBlend(
+                  (MediaMetadataRetriever.getDarkColor(colors))
+                      .withOpacity(opacity),
+                  Theme.of(context).backgroundColor),
+              Color.alphaBlend(
+                  colors[MediaMetadataRetriever.DominantColor]
+                      .withOpacity(opacity),
+                  Theme.of(context).backgroundColor),
+              Color.alphaBlend(
+                  colors[MediaMetadataRetriever.DominantColor]
+                      .withOpacity(opacity),
+                  Theme.of(context).backgroundColor),
+              Color.alphaBlend(
+                  (MediaMetadataRetriever.getLightColor(colors))
+                      .withOpacity(opacity),
+                  Theme.of(context).backgroundColor),
+            ];
 
   static Widget builder(BuildContext context, List<Color> colors) {
     return AnimatedSwitcher(
@@ -934,22 +993,7 @@ class _ColorfulBackgroundState extends State<ColorfulBackground> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Theme.of(context).brightness == Brightness.light
-                        ? (MediaMetadataRetriever.getLightColor(colors))
-                            .withOpacity(opacity)
-                        : (MediaMetadataRetriever.getDarkColor(colors))
-                            .withOpacity(opacity),
-                    colors[MediaMetadataRetriever.DominantColor]
-                        .withOpacity(opacity),
-                    colors[MediaMetadataRetriever.DominantColor]
-                        .withOpacity(opacity),
-                    Theme.of(context).brightness == Brightness.light
-                        ? (MediaMetadataRetriever.getDarkColor(colors))
-                            .withOpacity(opacity)
-                        : (MediaMetadataRetriever.getLightColor(colors))
-                            .withOpacity(opacity),
-                  ],
+                  colors: genColors(context, colors),
                   stops: const [0.0, 0.2, 0.7, 1.0],
                 )),
       ),
@@ -1028,8 +1072,11 @@ class FullScreenPanelContent extends StatelessWidget {
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: const <Widget>[
+          const Divider(
+            height: 10.0,
+          ),
           const FullScreenPanelArtworkPageView(),
-          const FullScreenPanelController(),
+          const FullScreenControllerPanel(),
         ],
       ),
     );
@@ -1065,10 +1112,68 @@ class _ArtworkPageViewForFullScreenPanelState
   final ValueNotifier<bool> pageControllerIsAnimating =
       ValueNotifier<bool>(false);
   PageController pageController;
-  Function() syncItem;
-  Function(int) onPageChange;
   CustomValueNotifier _list;
   CustomValueNotifier _item;
+
+  syncItem() async {
+    if (_item?.value == null || !_list.value.contains(_item.value)) {
+      debugPrint('list dont contains item');
+      return;
+    }
+    final int index = _list.value.indexOf(_item.value);
+    // debugPrint('index: ' + index.toString());
+
+    if ((pageController.page - index).abs() > 0.5) {
+      if (pageControllerIsAnimating.value) {
+        pageController
+            .animateToPage(index,
+                duration: Constants.defaultDuration, curve: Curves.decelerate)
+            .then((value) {
+          if (mounted) {
+            if (pageController?.page == _list.value.indexOf(_item.value)) {
+              pageControllerIsAnimating.value = false;
+            }
+          }
+        });
+        pageControllerIsAnimating.value = true;
+      } else {
+        pageController
+            .animateToPage(index,
+                duration: Constants.defaultDuration,
+                curve: Curves.fastOutSlowIn)
+            .then((value) {
+          if (mounted) {
+            if (pageController?.page == _list.value.indexOf(_item.value)) {
+              pageControllerIsAnimating.value = false;
+            }
+          }
+
+          // debugPrint('pageController.page == index?: ' + (pageController.page == index).toString());
+        });
+        pageControllerIsAnimating.value = true;
+      }
+    } else {
+      if (pageControllerIsAnimating.value) {
+        pageController
+            .animateToPage(index,
+                duration: Constants.defaultShortDuration,
+                curve: Curves.decelerate)
+            .then((value) {
+          if (mounted) {
+            if (pageController?.page == _list.value.indexOf(_item.value)) {
+              pageControllerIsAnimating.value = false;
+            }
+          }
+        });
+      }
+    }
+  }
+
+  onPageChange(int index) {
+    if (!pageControllerIsAnimating.value) {
+      Variable.setCurrentSong(_list.value, _list.value[index]);
+    }
+  }
 
   _onValueListenableBuild(BuildContext context) {
     _item?.removeListener(syncItem);
@@ -1084,66 +1189,6 @@ class _ArtworkPageViewForFullScreenPanelState
       pageController = PageController();
       //debugPrint('initialPage: null');
     }
-
-    syncItem ??= () async {
-      if (_item?.value == null || !_list.value.contains(_item.value)) {
-        debugPrint('list dont contains item');
-        return;
-      }
-      final int index = _list.value.indexOf(_item.value);
-      // debugPrint('index: ' + index.toString());
-
-      if ((pageController.page - index).abs() > 0.5) {
-        if (pageControllerIsAnimating.value) {
-          pageController
-              .animateToPage(index,
-                  duration: Constants.defaultDuration, curve: Curves.decelerate)
-              .then((value) {
-            if (mounted) {
-              if (pageController?.page == _list.value.indexOf(_item.value)) {
-                pageControllerIsAnimating.value = false;
-              }
-            }
-          });
-          pageControllerIsAnimating.value = true;
-        } else {
-          pageController
-              .animateToPage(index,
-                  duration: Constants.defaultDuration,
-                  curve: Curves.fastOutSlowIn)
-              .then((value) {
-            if (mounted) {
-              if (pageController?.page == _list.value.indexOf(_item.value)) {
-                pageControllerIsAnimating.value = false;
-              }
-            }
-
-            // debugPrint('pageController.page == index?: ' + (pageController.page == index).toString());
-          });
-          pageControllerIsAnimating.value = true;
-        }
-      } else {
-        if (pageControllerIsAnimating.value) {
-          pageController
-              .animateToPage(index,
-                  duration: Constants.defaultShortDuration,
-                  curve: Curves.decelerate)
-              .then((value) {
-            if (mounted) {
-              if (pageController?.page == _list.value.indexOf(_item.value)) {
-                pageControllerIsAnimating.value = false;
-              }
-            }
-          });
-        }
-      }
-    };
-
-    onPageChange ??= (int index) {
-      if (!pageControllerIsAnimating.value) {
-        Variable.setCurrentSong(_list.value, _list.value[index]);
-      }
-    };
 
     _item?.addListener(syncItem);
   }
@@ -1186,6 +1231,7 @@ class _ArtworkPageViewForFullScreenPanelState
                 physics: const BouncingScrollPhysics(),
                 itemBuilder: _pageViewItemBuilder,
                 itemCount: list.length,
+                cacheExtent: 1.0,
               );
       },
     );
@@ -1216,23 +1262,8 @@ class FullScreenPanelPageViewItem extends StatefulWidget {
 class _FullScreenPanelPageViewItemState
     extends State<FullScreenPanelPageViewItem> {
   static const edgePadding = 8.0;
-
-  Widget _valueListenableBuilder(
-          BuildContext context, MediaPlayerStatus status, Widget child) =>
-      status == MediaPlayerStatus.preparing ||
-              status == MediaPlayerStatus.started
-          ? AnimatedPadding(
-              padding: const EdgeInsets.all(edgePadding),
-              duration: Constants.defaultDuration,
-              curve: Curves.fastOutSlowIn,
-              child: child,
-            )
-          : AnimatedPadding(
-              padding: const EdgeInsets.all(edgePadding + 20),
-              duration: Constants.defaultDuration,
-              curve: Curves.fastOutSlowIn,
-              child: child,
-            );
+  static final Animation _animation =
+      Tween(begin: 0.9, end: 1.0).animate(Variable.playButtonController);
 
   @override
   Widget build(BuildContext context) {
@@ -1244,19 +1275,21 @@ class _FullScreenPanelPageViewItemState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            ValueListenableBuilder(
-              valueListenable: MediaPlayer.statusNotifier,
-              builder: _valueListenableBuilder,
-              child: AspectRatio(
-                aspectRatio: 1.0,
-                child: HeroArtwork(songInfo: widget.songInfo),
+            Padding(
+              padding: const EdgeInsets.all(edgePadding),
+              child: ScaleTransition(
+                scale: _animation,
+                child: AspectRatio(
+                  aspectRatio: 1.0,
+                  child: HeroArtwork(songInfo: widget.songInfo),
+                ),
               ),
             ),
             const Padding(
               padding: const EdgeInsets.symmetric(horizontal: edgePadding),
               child: const SizedBox(height: 30, child: const HeroTitle()),
             ),
-            Padding(
+            const Padding(
               padding: const EdgeInsets.symmetric(horizontal: edgePadding),
               child: const SizedBox(height: 20, child: const HeroArtist()),
             ),
@@ -1267,18 +1300,20 @@ class _FullScreenPanelPageViewItemState
   }
 }
 
-class FullScreenPanelController extends StatelessWidget {
-  const FullScreenPanelController({Key key}) : super(key: key);
+class FullScreenControllerPanel extends StatelessWidget {
+  const FullScreenControllerPanel({Key key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return const Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: const Material(
-        elevation: 0.0,
-        color: Colors.transparent,
-        child: const FullScreenPanelControllerLayout(),
+    return const Expanded(
+      child: const Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: const Material(
+          elevation: 0.0,
+          color: Colors.transparent,
+          child: const FullScreenPanelControllerLayout(),
+        ),
       ),
     );
   }
@@ -1296,17 +1331,20 @@ class FullScreenPanelControllerLayout extends StatelessWidget {
         return SongInfoInherited(
           songInfo: Variable.filePathToSongMap[songPath],
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.start,
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: <Widget>[
-              Row(
-                children: const <Widget>[
-                  const VerticalDivider(),
-                  const HeroLeftText(),
-                  const Expanded(child: const AnimatedProgressSlider()),
-                  const HeroRightText(),
-                  const VerticalDivider(),
-                ],
+              SizedBox(
+                height: 30,
+                child: Row(
+                  children: const <Widget>[
+                    const VerticalDivider(),
+                    const HeroLeftText(),
+                    const Expanded(child: const AnimatedProgressSlider()),
+                    const HeroRightText(),
+                    const VerticalDivider(),
+                  ],
+                ),
               ),
               SizedBox(
                 height: 100,
@@ -1852,13 +1890,23 @@ class _ProgressSliderState extends State<ProgressSlider>
   AnimationController _controller;
 
   _updateSlider() async {
+    if (MediaPlayer.status == MediaPlayerStatus.preparing ||
+        MediaPlayer.status == MediaPlayerStatus.stopped ||
+        MediaPlayer.status == MediaPlayerStatus.idle ||
+        MediaPlayer.status == MediaPlayerStatus.error ||
+        MediaPlayer.status == MediaPlayerStatus.end) {
+      await _controller.animateTo(0.0, curve: Curves.fastOutSlowIn);
+      return;
+    }
+    MediaPlayer.currentPositionNotifier.value =
+        await MediaPlayer.getCurrentPosition();
     await _controller.animateTo(
         MediaPlayer.currentPosition / MediaPlayer.currentDuration,
         curve: Curves.fastOutSlowIn);
     if (MediaPlayer.status == MediaPlayerStatus.started) {
       _controller.value =
           MediaPlayer.currentPosition / MediaPlayer.currentDuration;
-      _controller.animateTo(1.0,
+      await _controller.animateTo(1.0,
           duration: Duration(
               milliseconds:
                   MediaPlayer.currentDuration - MediaPlayer.currentPosition));

@@ -11,6 +11,9 @@ class Constants {
   static const String database = 'johngu';
   static const String libraryTable = 'library';
   static const String favouriteTable = 'favourite';
+  static const String cacheRemotePictureTable = 'cacheRemotePicture';
+
+  static const int durationThreshold = 15 * 1000;
 
   static const Color darkGrey = Color(0xFF202020);
   static const Color lightGrey = Color(0xFFE0E0E0);
@@ -248,6 +251,24 @@ class Constants {
       ),
     );
   };
+
+  static final Function(
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) optimizeFlightShuttleBuilder = (
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) =>
+      FadeTransition(
+        opacity: const AlwaysStoppedAnimation<double>(1.0),
+        child: toHeroContext.widget,
+      );
 
   static const double panelOpacity = 0.8;
 

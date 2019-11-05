@@ -20,7 +20,6 @@ import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
-import android.os.Handler;
 import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
@@ -31,7 +30,6 @@ import androidx.core.app.NotificationCompat;
 import androidx.media.app.NotificationCompat.MediaStyle;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Objects;
 
 import io.flutter.plugin.common.MethodChannel;
@@ -69,12 +67,13 @@ public final class MediaPlayerService extends IntentService
     static private AudioManager audioManager;
     static private AudioAttributes audioAttributes;
     static private AudioFocusRequest audioFocusRequest;
-    static private Handler audioFocusRequestHandler;
     static private volatile String currentDataSource;
     static private String title;
     static private String artist;
     static private String album;
+    static private byte[] artwork;
     static private float volume;
+    static public final String unknown = "<unknown>";
 
     static private NotificationManager notificationManager;
     private NotificationCompat.Builder notificationPendingBuilder;
@@ -86,18 +85,20 @@ public final class MediaPlayerService extends IntentService
     static private final Runnable onPauseRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "paused");
     static private final Runnable onPreviousRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("onPrevious", null);
     static private final Runnable onNextRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("onNext", null);
+    private final int updateNotificationPriority = Thread.MIN_PRIORITY + 1;
     private final Runnable updateNotificationRunnable = new Runnable() {
         @Override
         public void run() {
+            String filePath = currentDataSource;
             MediaMetadataRetriever mmr = new MediaMetadataRetriever();
-            mmr.setDataSource(currentDataSource);
-            if (title == null) {
+            mmr.setDataSource(filePath);
+            if (title == null || title.equals(unknown)) {
                 title = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
             }
-            if (artist == null) {
+            if (artist == null || artist.equals(unknown)) {
                 artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
             }
-            if (album == null) {
+            if (album == null || album.equals(unknown)) {
                 album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
             }
 
@@ -109,14 +110,7 @@ public final class MediaPlayerService extends IntentService
             notificationActingBuilder.setContentText(artist);
             notificationActingBuilder.setSubText(album);
 
-            mediaMetadata = new MediaMetadataCompat.Builder();
-            mediaMetadata.putString(MediaMetadata.METADATA_KEY_TITLE, title);
-            mediaMetadata.putString(MediaMetadata.METADATA_KEY_ARTIST, artist);
-            mediaMetadata.putString(MediaMetadata.METADATA_KEY_ALBUM, album);
-            mediaMetadata.putLong(MediaMetadata.METADATA_KEY_DURATION, Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)));
-            mediaSession.setMetadata(mediaMetadata.build());
 
-            byte[] artwork = mmr.getEmbeddedPicture();
             Bitmap bitmap;
             if (artwork != null) {
                 bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
@@ -124,7 +118,6 @@ public final class MediaPlayerService extends IntentService
                 notificationActingBuilder.setLargeIcon(bitmap);
                 notificationPending = notificationPendingBuilder.build();
                 notificationActing = notificationActingBuilder.build();
-                bitmap.recycle();
             } else {
                 bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_abstract);
                 notificationPendingBuilder.setLargeIcon(bitmap);
@@ -133,31 +126,39 @@ public final class MediaPlayerService extends IntentService
                 notificationActing = notificationActingBuilder.build();
             }
 
-
             synchronized (this) {
-                if (mediaPlayer.isPlaying()) {
-                    mediaSession.setActive(true);
-                    notificationManager.notify(MediaPlayerNotifyID, notificationActing);
-                } else {
-                    mediaSession.setActive(false);
-                    notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+                if (filePath.equals(currentDataSource)) {
+                    if (mediaPlayer.isPlaying()) {
+                        mediaSession.setActive(true);
+                        notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+                    } else {
+                        mediaSession.setActive(false);
+                        notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+                    }
                 }
             }
+            mediaMetadata = new MediaMetadataCompat.Builder();
+            mediaMetadata.putString(MediaMetadata.METADATA_KEY_TITLE, title);
+            mediaMetadata.putString(MediaMetadata.METADATA_KEY_ARTIST, artist);
+            mediaMetadata.putString(MediaMetadata.METADATA_KEY_ALBUM, album);
+            mediaMetadata.putLong(MediaMetadata.METADATA_KEY_DURATION, Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)));
+            mediaSession.setMetadata(mediaMetadata.build());
 
+            mmr.release();
         }
     };
 
-    public static Bitmap drawableToBitmap (Drawable drawable) {
+    public static Bitmap drawableToBitmap(Drawable drawable) {
         Bitmap bitmap;
 
         if (drawable instanceof BitmapDrawable) {
             BitmapDrawable bitmapDrawable = (BitmapDrawable) drawable;
-            if(bitmapDrawable.getBitmap() != null) {
+            if (bitmapDrawable.getBitmap() != null) {
                 return bitmapDrawable.getBitmap();
             }
         }
 
-        if(drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
+        if (drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
             bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888); // Single color bitmap will be created of 1x1 pixel
         } else {
             bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
@@ -180,7 +181,6 @@ public final class MediaPlayerService extends IntentService
     public MediaPlayerService() {
         super("MediaPlayerService");
         mediaPlayerServiceBinder = new MediaPlayerServiceBinder();
-        audioFocusRequestHandler = new Handler();
         volume = -1;
     }
 
@@ -262,6 +262,8 @@ public final class MediaPlayerService extends IntentService
         mediaSession.setPlaybackState(playbackState);
         mediaSession.setActive(true);
 
+        notificationManager = getSystemService(NotificationManager.class);
+        assert notificationManager != null;
 
         // Create the NotificationChannel, but only on API 26+ because
         // the NotificationChannel class is new and not in the support library
@@ -275,8 +277,7 @@ public final class MediaPlayerService extends IntentService
             channel.setSound(null, null);
             // Register the channel with the system; you can't change the importance
             // or other notification behaviors after this
-            notificationManager = getSystemService(NotificationManager.class);
-            assert notificationManager != null;
+
             notificationManager.deleteNotificationChannel(MediaPlayerNotificationChannel_ID);
             notificationManager.createNotificationChannel(channel);
         }
@@ -325,11 +326,11 @@ public final class MediaPlayerService extends IntentService
     private void AudioFocusInit() {
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
                     .setAudioAttributes(audioAttributes)
                     .setAcceptsDelayedFocusGain(true)
                     .setWillPauseWhenDucked(true)
-                    .setOnAudioFocusChangeListener(this, audioFocusRequestHandler)
+                    .setOnAudioFocusChangeListener(this)
                     .build();
         }
     }
@@ -406,37 +407,7 @@ public final class MediaPlayerService extends IntentService
 
         public final void setDataSource(String path) {
             currentDataSource = path;
-            Constants.MediaPlayerMethodChannel.invokeMethod(
-                    "stateManager",
-                    "preparing",
-                    new MethodChannel.Result() {
-                        @Override
-                        public void success(Object o) {
-                            ArrayList<String> res = (ArrayList<String>) o;
-                            title = res.get(0);
-                            artist = res.get(1);
-                            album = res.get(2);
-                            Thread thread = new Thread(updateNotificationRunnable);
-                            thread.setPriority(Thread.MIN_PRIORITY);
-                            thread.start();
-                        }
-
-                        @Override
-                        public void error(String s, String s1, Object o) {
-                            album = artist = title = null;
-                            Thread thread = new Thread(updateNotificationRunnable);
-                            thread.setPriority(Thread.MIN_PRIORITY);
-                            thread.start();
-                        }
-
-                        @Override
-                        public void notImplemented() {
-                            album = artist = title = null;
-                            Thread thread = new Thread(updateNotificationRunnable);
-                            thread.setPriority(Thread.MIN_PRIORITY);
-                            thread.start();
-                        }
-                    });
+            Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "preparing");
             Thread prepareThread = new Thread(new SetDataSourceRunnable(path));
             prepareThread.setPriority(Thread.MIN_PRIORITY);
             prepareThread.start();
@@ -470,6 +441,16 @@ public final class MediaPlayerService extends IntentService
             volume = val;
             mediaPlayer.setVolume(volume, volume);
         }
+
+        public final void updateNotification(String title, String artist, String album, byte[] artwork) {
+            MediaPlayerService.title = title;
+            MediaPlayerService.artist = artist;
+            MediaPlayerService.album = album;
+            MediaPlayerService.artwork = artwork;
+            Thread thread = new Thread(updateNotificationRunnable);
+            thread.setPriority(updateNotificationPriority);
+            thread.start();
+        }
     }
 
     class SetDataSourceRunnable implements Runnable {
@@ -495,7 +476,7 @@ public final class MediaPlayerService extends IntentService
                     try {
                         mediaPlayer.setDataSource(currentDataSource);
                     } catch (IOException e) {
-                        Log.d("onSetDateSource", e.toString());
+                        Log.d("onSetDateSource", e.getMessage());
                     }
                     updatePlaybackState(PlaybackStateCompatInit, 0);
                 } else {

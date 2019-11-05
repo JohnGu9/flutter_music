@@ -13,7 +13,10 @@ import android.util.Log;
 
 import androidx.palette.graphics.Palette;
 
+import com.android.volley.toolbox.Volley;
+
 import java.util.ArrayList;
+import java.util.Set;
 
 import io.flutter.app.FlutterActivity;
 import io.flutter.plugin.common.MethodChannel;
@@ -30,6 +33,7 @@ public class MainActivity extends FlutterActivity {
         super.onCreate(savedInstanceState);
         GeneratedPluginRegistrant.registerWith(this);
 
+        RemoteMediaMetadataRetriever.queue = Volley.newRequestQueue(this);
         Constants.mainThreadHandler = new Handler();
 
         Constants.AndroidMethodChannel = new MethodChannel(getFlutterView(), "Android");
@@ -47,6 +51,10 @@ public class MainActivity extends FlutterActivity {
                             result.success(null);
                             break;
 
+                        case "test":
+                            result.success(null);
+                            break;
+
                         default:
                             result.notImplemented();
                     }
@@ -56,49 +64,45 @@ public class MainActivity extends FlutterActivity {
         Constants.MediaMetadataRetrieverMethodChannel.setMethodCallHandler(
                 (methodCall, result) -> {
                     MediaMetadataRetriever mmr;
-                    String path = (String) methodCall.argument("path");
+                    String filePath = (String) methodCall.argument("filePath");
 
                     switch (methodCall.method) {
                         case "getEmbeddedPicture":
                             mmr = new MediaMetadataRetriever();
-                            mmr.setDataSource(path);
+                            mmr.setDataSource(filePath);
                             byte[] res = mmr.getEmbeddedPicture();
                             result.success(res);
                             mmr.release();
 
                             // Addition Function: Get Palette
                             // Get Palette (Full Async) run on background
-                            if (methodCall.argument("palette")) {
-                                if (res == null) {
-                                    ArrayList list = new ArrayList<Object>();
-                                    list.add(path);
-                                    Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list);
-                                } else {
-                                    Bitmap bitmap = BitmapFactory.decodeByteArray(res, 0, res.length);
-                                    Thread thread = new Thread(() -> {
-                                        Palette palette = new Palette.Builder(bitmap).generate();
-                                        ArrayList list = new ArrayList<Object>() {{
-                                            add(path);
-                                            add(palette.getDominantSwatch() != null ? palette.getDominantSwatch().getRgb() : null);
-                                            add(palette.getVibrantSwatch() != null ? palette.getVibrantSwatch().getRgb() : null);
-                                            add(palette.getMutedSwatch() != null ? palette.getMutedSwatch().getRgb() : null);
-                                            add(palette.getLightVibrantSwatch() == null ? null : palette.getLightVibrantSwatch().getRgb());
-                                            add(palette.getLightMutedSwatch() == null ? null : palette.getLightMutedSwatch().getRgb());
-                                            add(palette.getDarkVibrantSwatch() == null ? null : palette.getDarkVibrantSwatch().getRgb());
-                                            add(palette.getDarkMutedSwatch() == null ? null : palette.getDarkMutedSwatch().getRgb());
-                                        }};
-                                        Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
-                                        bitmap.recycle();
-                                    });
-                                    thread.setPriority(Thread.MIN_PRIORITY);
-                                    thread.start();
-                                }
+
+                            if (res != null) {
+                                Bitmap bitmap = BitmapFactory.decodeByteArray(res, 0, res.length);
+                                Thread thread = new Thread(() -> {
+                                    Palette palette = new Palette.Builder(bitmap).generate();
+                                    ArrayList list = new ArrayList<Object>() {{
+                                        add(filePath);
+                                        add(palette.getDominantSwatch() != null ? palette.getDominantSwatch().getRgb() : null);
+                                        add(palette.getVibrantSwatch() != null ? palette.getVibrantSwatch().getRgb() : null);
+                                        add(palette.getMutedSwatch() != null ? palette.getMutedSwatch().getRgb() : null);
+                                        add(palette.getLightVibrantSwatch() == null ? null : palette.getLightVibrantSwatch().getRgb());
+                                        add(palette.getLightMutedSwatch() == null ? null : palette.getLightMutedSwatch().getRgb());
+                                        add(palette.getDarkVibrantSwatch() == null ? null : palette.getDarkVibrantSwatch().getRgb());
+                                        add(palette.getDarkMutedSwatch() == null ? null : palette.getDarkMutedSwatch().getRgb());
+                                    }};
+                                    Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
+                                    bitmap.recycle();
+                                });
+                                thread.setPriority(Thread.MIN_PRIORITY);
+                                thread.start();
                             }
+
                             break;
 
                         case "getBasicInfo":
                             mmr = new MediaMetadataRetriever();
-                            mmr.setDataSource(path);
+                            mmr.setDataSource(filePath);
                             ArrayList<String> infoList = new ArrayList<String>();
                             infoList.add(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE));
                             infoList.add(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST));
@@ -107,6 +111,83 @@ public class MainActivity extends FlutterActivity {
                             mmr.release();
                             break;
 
+                        case "getRemotePicture":
+                            Thread thread = new Thread(new Runnable() {
+                                // flutter have more accurate parser
+                                String artist = methodCall.argument("artist");
+                                String title = methodCall.argument("title");
+                                final String duration = methodCall.argument("duration");
+
+                                @Override
+                                public void run() {
+                                    if (artist.equals(MediaPlayerService.unknown)) {
+                                        artist = null;
+                                    }
+                                    if (title.equals(MediaPlayerService.unknown)) {
+                                        title = null;
+                                    }
+                                    Set<String> ids = RemoteMediaMetadataRetriever.getMBID(artist, title, duration);
+                                    byte[] res = RemoteMediaMetadataRetriever.getArtwork(ids);
+                                    final ArrayList<Object> result = new ArrayList<Object>() {{
+                                        add(filePath);
+                                        add(res);
+                                    }};
+                                    // return Artwork
+                                    Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("getRemotePicture", result));
+
+                                    // Addition Function: Get Palette
+                                    // Get Palette (Full Async) run on background
+                                    if (res != null) {
+                                        Bitmap bitmap = BitmapFactory.decodeByteArray(res, 0, res.length);
+                                        Palette palette = new Palette.Builder(bitmap).generate();
+                                        ArrayList list = new ArrayList<Object>() {{
+                                            add(filePath);
+                                            add(palette.getDominantSwatch() != null ? palette.getDominantSwatch().getRgb() : null);
+                                            add(palette.getVibrantSwatch() != null ? palette.getVibrantSwatch().getRgb() : null);
+                                            add(palette.getMutedSwatch() != null ? palette.getMutedSwatch().getRgb() : null);
+                                            add(palette.getLightVibrantSwatch() == null ? null : palette.getLightVibrantSwatch().getRgb());
+                                            add(palette.getLightMutedSwatch() == null ? null : palette.getLightMutedSwatch().getRgb());
+                                            add(palette.getDarkVibrantSwatch() == null ? null : palette.getDarkVibrantSwatch().getRgb());
+                                            add(palette.getDarkMutedSwatch() == null ? null : palette.getDarkMutedSwatch().getRgb());
+                                        }};
+                                        // return Palette
+                                        Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
+                                        bitmap.recycle();
+                                    }
+                                }
+                            });
+                            thread.setPriority(Thread.MIN_PRIORITY + 1);
+                            thread.start();
+                            result.success(null);
+
+                            break;
+
+                        case "getPalette":
+                            byte[] artwork = methodCall.argument("artwork");
+                            Bitmap bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
+                            Thread thread0 = new Thread(new Runnable() {
+
+                                @Override
+                                public void run() {
+                                    Palette palette = new Palette.Builder(bitmap).generate();
+                                    ArrayList list = new ArrayList<Object>() {{
+                                        add(filePath);
+                                        add(palette.getDominantSwatch() != null ? palette.getDominantSwatch().getRgb() : null);
+                                        add(palette.getVibrantSwatch() != null ? palette.getVibrantSwatch().getRgb() : null);
+                                        add(palette.getMutedSwatch() != null ? palette.getMutedSwatch().getRgb() : null);
+                                        add(palette.getLightVibrantSwatch() == null ? null : palette.getLightVibrantSwatch().getRgb());
+                                        add(palette.getLightMutedSwatch() == null ? null : palette.getLightMutedSwatch().getRgb());
+                                        add(palette.getDarkVibrantSwatch() == null ? null : palette.getDarkVibrantSwatch().getRgb());
+                                        add(palette.getDarkMutedSwatch() == null ? null : palette.getDarkMutedSwatch().getRgb());
+                                    }};
+                                    Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
+                                    bitmap.recycle();
+                                }
+                            });
+                            thread0.setPriority(Thread.MIN_PRIORITY);
+                            thread0.start();
+                            result.success(null);
+                            break;
                         default:
                             result.notImplemented();
                     }
@@ -197,6 +278,10 @@ public class MainActivity extends FlutterActivity {
                             result.success(null);
                             break;
 
+                        case "updateNotification":
+                            mediaPlayerServiceBinder.updateNotification(methodCall.argument("title"), methodCall.argument("artist"), methodCall.argument("album"), methodCall.argument("artwork"));
+                            break;
+
                         default:
                             result.notImplemented();
                     }
@@ -228,4 +313,5 @@ public class MainActivity extends FlutterActivity {
         startActivity(new Intent(Constants.ACTION_STOPSELF));
         super.onDestroy();
     }
+
 }

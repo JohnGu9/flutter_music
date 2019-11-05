@@ -1,11 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
-testDb()async{
-  final LinkedList list = await LinkedList.easeLinkedList<String>(database: 'test', table: 'test',drop: true);
-  list.addAll(['john0',]);
+class DatabaseHelper {
+  static Database database;
+
+  static Future<Database> easeDatabase(String name) async =>
+      openDatabase(path.join(await getDatabasesPath(), '$name.db'));
 }
 
 class DatabaseKey<T> {
@@ -13,13 +17,32 @@ class DatabaseKey<T> {
 
   final keyName;
 
+  static final uInt8ListType = const DatabaseKey<Uint8List>().runtimeType;
+
   static final typeMap = {
     const DatabaseKey<String>().runtimeType: 'TEXT',
+    uInt8ListType: 'TEXT',
     const DatabaseKey<int>().runtimeType: 'INTEGER',
     const DatabaseKey<bool>().runtimeType: 'BIT',
     const DatabaseKey<double>().runtimeType: 'REAL',
     const DatabaseKey().runtimeType: 'BLOB',
   };
+
+  dataDecode(dynamic data) {
+    if (this.runtimeType == uInt8ListType) {
+      assert(data is String);
+      return Uint8List.fromList(data.codeUnits);
+    }
+    return data;
+  }
+
+  dataEncode(dynamic data) {
+    if (this.runtimeType == uInt8ListType) {
+      assert(data is Uint8List);
+      return String.fromCharCodes(data);
+    }
+    return data;
+  }
 
   @override
   String toString() {
@@ -39,10 +62,10 @@ class DatabaseKey<T> {
 }
 
 class LinkedList<T> {
-  LinkedList({this.database}) : assert(database != null);
+  LinkedList({this.database, this.table}) : assert(database != null);
 
   final Database database;
-  String table;
+  final String table;
   List<T> list;
 
   final DatabaseKey primaryKey = DatabaseKey<T>(keyName: 'filePath');
@@ -68,17 +91,15 @@ class LinkedList<T> {
     @required String table,
     bool drop = false,
   }) async =>
-      await LinkedList<T>(database: await easeDatabase(database))
-          .bindTable(table, drop);
+      await LinkedList<T>(database: await easeDatabase(database), table: table)
+          .bindTable(drop);
 
-  Future<LinkedList<T>> bindTable(String tableName, bool drop) async {
-    this.table = tableName;
-
+  Future<LinkedList<T>> bindTable(bool drop) async {
     /// [drop] whether drop the existing table
     if (drop) {
-      await database.execute("drop table if exists $tableName");
+      await database.execute("drop table if exists $table");
     }
-    await database.execute("CREATE TABLE IF NOT EXISTS $tableName" +
+    await database.execute("CREATE TABLE IF NOT EXISTS $table" +
         generateStructure([primaryKey, previousKey, nextKey]));
     await _initialize();
     return this;
@@ -296,7 +317,7 @@ class LinkedList<T> {
 
   indexOf(T element) => list.indexOf(element);
 
-  reorder(int oldIndex, int newIndex)async {
+  reorder(int oldIndex, int newIndex) async {
     if (oldIndex == newIndex) {
       return;
     } else if (oldIndex < newIndex) {
@@ -361,6 +382,92 @@ class LinkedList<T> {
 
     if (diff && updated != null) {
       updated();
+    }
+  }
+}
+
+class Table {
+  Table(this.database, this.table, this.primaryKey, this.keys);
+
+  final Database database;
+  final String table;
+  final DatabaseKey primaryKey;
+  final List<DatabaseKey> keys;
+
+  static Future<Database> easeDatabase(String name) async =>
+      openDatabase(path.join(await getDatabasesPath(), '$name.db'));
+
+  static Future<Table> easeTable<T>({
+    @required String database,
+    @required String table,
+    @required DatabaseKey primaryKey,
+    @required List<DatabaseKey> keys,
+    bool drop = false,
+  }) async {
+    final res = Table(await easeDatabase(database), table, primaryKey, keys);
+    await res.bindTable(drop: drop);
+    return res;
+  }
+
+  String generateStructure() {
+    String res = "(";
+    res += primaryKey.toPrimaryString();
+    for (final key in keys) {
+      res += key.toString();
+    }
+    return res + ")";
+  }
+
+  bindTable({bool drop = false}) async {
+    /// [drop] whether drop the table exists
+    if (drop) {
+      await database.execute("drop table if exists $table");
+    }
+    await database
+        .execute("CREATE TABLE IF NOT EXISTS $table" + generateStructure());
+  }
+
+  setData(Map data) async {
+    assert(data.containsKey(primaryKey.keyName));
+    Map<String, dynamic> _data = Map();
+    _data[primaryKey.keyName] = primaryKey.dataEncode(data[primaryKey.keyName]);
+    for (final key in keys) {
+      _data[key.keyName] = key.dataEncode(data[key.keyName]);
+    }
+    await database.insert(table, _data,
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<Map> getData(primaryKeyValue) async {
+    List<Map> _maps = await database.query(table,
+        where: primaryKey.toWhereString(),
+        whereArgs: [primaryKey.dataDecode(primaryKeyValue)],
+        limit: 1);
+    if(_maps.isEmpty) {
+      return null;
+    }
+    Map map = Map();
+    map[primaryKey.keyName] =
+        primaryKey.dataDecode(_maps[0][primaryKey.keyName]);
+    for (final key in keys) {
+      map[key.keyName] = key.dataDecode(_maps[0][key.keyName]);
+    }
+    return map;
+  }
+
+  removeData({Map data, primaryKeyValue}) async {
+    if (data != null) {
+      await database.delete(
+        table,
+        where: primaryKey.toWhereString(),
+        whereArgs: [primaryKey.dataDecode(data[primaryKey.keyName])],
+      );
+    } else if (primaryKeyValue != null) {
+      await database.delete(
+        table,
+        where: primaryKey.toWhereString(),
+        whereArgs: [primaryKey.dataDecode(primaryKeyValue)],
+      );
     }
   }
 }

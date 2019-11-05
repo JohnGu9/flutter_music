@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart' show MethodCall, MethodChannel;
@@ -18,7 +19,8 @@ enum MediaPlayerStatus {
 }
 
 class MediaPlayer {
-  static final mediaPlayerCHANNEL = const MethodChannel('MP')
+  // ignore: non_constant_identifier_names
+  static final MediaPlayerChannel = const MethodChannel('MP')
     ..setMethodCallHandler(methodCallHandler);
 
   // Java invokeMethod
@@ -52,8 +54,7 @@ class MediaPlayer {
             break;
           case 'preparing':
             _stateUpdate(MediaPlayerStatus.preparing);
-            // update info for notification
-            return getSongInfo();
+            return null;
             break;
           case 'end':
             debugPrint('MediaPlayer end');
@@ -106,7 +107,6 @@ class MediaPlayer {
   static onSkipNext() => onNext();
   static void Function() onPrevious = () {};
   static void Function() onNext = () {};
-  static List<String> Function() getSongInfo = () => [];
 
   static final ValueNotifier<int> currentDurationNotifier =
       ValueNotifier<int>(1);
@@ -131,8 +131,8 @@ class MediaPlayer {
       (MediaPlayerStatus state, MediaPlayerStatus preState) =>
           debugPrint('MediaPlayerStatus' + state.toString());
 
-  static final ValueNotifier<MediaPlayerStatus> statusNotifier =
-      ValueNotifier(MediaPlayerStatus.idle);
+  static final CustomValueNotifier<MediaPlayerStatus> statusNotifier =
+      CustomValueNotifier(MediaPlayerStatus.idle);
 
   static MediaPlayerStatus get status => statusNotifier.value;
 
@@ -147,10 +147,10 @@ class MediaPlayer {
     if (status == MediaPlayerStatus.started) {
       positionUpdateTimer =
           Timer.periodic(positionUpdateTimeInterval, (timer) async {
-        final position =
-            await mediaPlayerCHANNEL.invokeMethod('getCurrentPosition');
-        currentPositionNotifier.value = position;
-        onPositionChangeListener(position, MediaPlayer.currentDuration);
+        currentPositionNotifier.value =
+            await MediaPlayerChannel.invokeMethod('getCurrentPosition');
+        onPositionChangeListener(
+            MediaPlayer.currentPosition, MediaPlayer.currentDuration);
       });
     } else {
       if (positionUpdateTimer != null && positionUpdateTimer.isActive) {
@@ -212,7 +212,7 @@ class MediaPlayer {
 
   // app will auto setup mediaPlayer in the beginning, it shouldn't init again while app start
   static void init() =>
-      mediaPlayerCHANNEL.invokeMethod('init').catchError((error) {
+      MediaPlayerChannel.invokeMethod('init').catchError((error) {
         debugPrint('onConstructors');
         debugPrint(error.toString());
       });
@@ -225,8 +225,8 @@ class MediaPlayer {
       return;
     }
     currentMedia = path;
-    mediaPlayerCHANNEL
-        .invokeMethod('setDataSource', {'path': path}).catchError((error) {
+    MediaPlayerChannel.invokeMethod('setDataSource', {'path': path})
+        .catchError((error) {
       _stateUpdate(MediaPlayerStatus.error);
       debugPrint('onSetDataSource');
       debugPrint(error.toString());
@@ -247,7 +247,7 @@ class MediaPlayer {
       debugPrint('invalid start');
       return false;
     }
-    await mediaPlayerCHANNEL.invokeMethod('start').catchError((error) {
+    await MediaPlayerChannel.invokeMethod('start').catchError((error) {
       debugPrint('onPlay');
       debugPrint(error.toString());
     });
@@ -255,46 +255,46 @@ class MediaPlayer {
   }
 
   static void pause() async =>
-      mediaPlayerCHANNEL.invokeMethod('pause').catchError((error) {
+      MediaPlayerChannel.invokeMethod('pause').catchError((error) {
         debugPrint('onPause');
         debugPrint(error.toString());
       });
 
   static void stop() async =>
-      mediaPlayerCHANNEL.invokeMethod('stop').catchError((error) {
+      MediaPlayerChannel.invokeMethod('stop').catchError((error) {
         debugPrint('onStop');
         debugPrint(error.toString());
       });
 
   static void release() async =>
-      mediaPlayerCHANNEL.invokeMethod('release').catchError((error) {
+      MediaPlayerChannel.invokeMethod('release').catchError((error) {
         debugPrint('onRelease');
         debugPrint(error.toString());
       });
 
   static void reset() async =>
-      mediaPlayerCHANNEL.invokeMethod('reset').catchError((error) {
+      MediaPlayerChannel.invokeMethod('reset').catchError((error) {
         debugPrint('onReset');
         debugPrint(error.toString());
       });
 
   static Future<bool> isAvailable() async =>
-      await mediaPlayerCHANNEL.invokeMethod('isAvailable');
+      await MediaPlayerChannel.invokeMethod('isAvailable');
 
   static Future<int> getCurrentPosition() async =>
-      await mediaPlayerCHANNEL.invokeMethod('getCurrentPosition');
+      await MediaPlayerChannel.invokeMethod('getCurrentPosition');
 
   static Future<int> getDuration() async =>
-      await mediaPlayerCHANNEL.invokeMethod('getDuration');
+      await MediaPlayerChannel.invokeMethod('getDuration');
 
   static void seekTo(int position) async =>
-      await mediaPlayerCHANNEL.invokeMethod('seekTo', {'position': position});
+      await MediaPlayerChannel.invokeMethod('seekTo', {'position': position});
 
   static void setLooping(bool loop) async =>
-      await mediaPlayerCHANNEL.invokeMethod('setLooping', {'loop': loop});
+      await MediaPlayerChannel.invokeMethod('setLooping', {'loop': loop});
 
   static Future<bool> isLooping() async =>
-      await mediaPlayerCHANNEL.invokeMethod('isLooping');
+      await MediaPlayerChannel.invokeMethod('isLooping');
 
   static final ValueNotifier<double> volumeNotifier = ValueNotifier<double>(0.0)
     ..addListener(() => setVolume(volume));
@@ -304,5 +304,11 @@ class MediaPlayer {
   static double get volume => volumeNotifier.value;
 
   static void setVolume(double _volume) async =>
-      await mediaPlayerCHANNEL.invokeMethod('setVolume', {'volume': _volume});
+      await MediaPlayerChannel.invokeMethod('setVolume', {'volume': _volume});
+
+  static updateNotification(
+      String title, String artist, String album, Uint8List artwork) async {
+    await MediaPlayerChannel.invokeMethod('updateNotification',
+        {'title': title, 'artist': artist, 'album': album, 'artwork': artwork});
+  }
 }

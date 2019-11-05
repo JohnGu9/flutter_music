@@ -61,7 +61,7 @@ class _SongViewPageState extends State<SongViewPage> {
             duration: Constants.defaultDuration,
             curve: Curves.fastOutSlowIn));
     tag = widget.songInfo.hashCode.toString() + 'song';
-    _image = Variable.filePathToImageMap[widget.songInfo.filePath];
+    _image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
   }
 
   @override

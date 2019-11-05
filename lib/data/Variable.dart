@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_app/component/AntiBlockingWidget.dart';
-import 'package:flutter_app/data/Database.dart';
+import 'package:flutter_app/data/Database.dart' as Database;
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 import 'package:share_extend/share_extend.dart';
 
@@ -15,8 +15,18 @@ import 'Constants.dart';
 class Variable {
   static final audioQuery = FlutterAudioQuery();
 
-  static LinkedList library;
-  static LinkedList favourite;
+  static Database.LinkedList library;
+  static Database.LinkedList favourite;
+
+  static Database.Table cacheRemotePicture;
+  static const cacheRemotePicturePrimaryKey =
+      Database.DatabaseKey<String>(keyName: 'filePath');
+  static const cacheRemotePictureKeys = [
+    Database.DatabaseKey<String>(keyName: 'img0')
+  ];
+
+  static final ValueNotifier<int> durationThreshold =
+      ValueNotifier<int>(Constants.durationThreshold);
 
   static final CustomValueNotifier<List> currentList =
       CustomValueNotifier(null);
@@ -50,23 +60,49 @@ class Variable {
   static Function() beforeSetCurrentSong = () {};
   static Future<void> Function() pageRouteTransition = () async {};
 
+  /// Get image async from [getArtworkAsync]
   static final Map<String, Future<ImageProvider>> futureImages =
-      Map<String, Future<ImageProvider>>(); // Get image async
-  static final Map<String, ImageProvider> filePathToImageMap = Map<String,
-      ImageProvider>(); // Get data sync, but if data isn't ready, it will return null.
+      Map<String, Future<ImageProvider>>();
 
-  // This function must be called before get image from filePathToImageMap(above) sync
-  static Future<ImageProvider> getArtworkAsync({String path}) async {
+  /// Get data sync, but if data isn't ready from [getArtworkAsync], it will return null.
+  static final Map<String, ValueNotifier<ImageProvider>> filePathToImageMap =
+      Map<String, ValueNotifier<ImageProvider>>();
+
+  /// This function must be called before get image from [filePathToImageMap] sync
+  static Future<ImageProvider> getArtworkAsync({String path}) {
     if (path == null) {
       return null;
     }
     // If image has no cache yet, instance a future to cache the image data
     if (!futureImages.containsKey(path)) {
-      futureImages[path] = MediaMetadataRetriever.getEmbeddedPicture(path)
-          .then((value) => filePathToImageMap[path] = value);
+      filePathToImageMap[path] ??= ValueNotifier<ImageProvider>(null);
+      futureImages[path] = Future<ImageProvider>(() async {
+        ImageProvider image =
+            await MediaMetadataRetriever.getEmbeddedPicture(path);
+        if (image == null) {
+          final data = await cacheRemotePicture.getData(path);
+          if (data != null) {
+            image = MemoryImage(data[cacheRemotePictureKeys[0].keyName]);
+            MediaMetadataRetriever.getPalette(
+                path, data[cacheRemotePictureKeys[0].keyName]);
+          }
+        }
+        filePathToImageMap[path].value = image;
+
+        if (image == null && shouldGetRemotePicture) {
+          /// query image from internet
+          SongInfo songInfo = filePathToSongMap[path];
+          MediaMetadataRetriever.getRemotePicture(songInfo.filePath,
+              songInfo.artist, songInfo.title, songInfo.duration);
+        }
+
+        return image;
+      });
     }
     return Variable.futureImages[path];
   }
+
+  static bool shouldGetRemotePicture = false;
 
   static Future mediaPlayerInitialization;
   static Future playListInitialization;
