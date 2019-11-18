@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_audio_query/flutter_audio_query.dart';
 
 import '../../data/Constants.dart';
 import '../../data/Variable.dart';
 
 class SongTileArtwork extends StatefulWidget {
-  const SongTileArtwork({Key key, @required this.songInfo}) : super(key: key);
-  final SongInfo songInfo;
+  const SongTileArtwork({Key key, @required this.filePath}) : super(key: key);
+  final String filePath;
 
   @override
   _SongTileArtworkState createState() => _SongTileArtworkState();
@@ -17,23 +16,19 @@ class _SongTileArtworkState extends State<SongTileArtwork> {
   ImageProvider image;
 
   _loadImageAsync() async {
-    image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
+    image = Variable.filePathToImageMap[widget.filePath].value;
     await SchedulerBinding.instance.endOfFrame;
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   @override
   void didUpdateWidget(SongTileArtwork oldWidget) {
     // TODO: implement didUpdateWidget
-    if (widget.songInfo != oldWidget.songInfo) {
-      Variable.filePathToImageMap[oldWidget.songInfo?.filePath]
+    if (widget.filePath != oldWidget.filePath) {
+      Variable.filePathToImageMap[oldWidget.filePath]
           ?.removeListener(_loadImageAsync);
-      image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
-      Variable.filePathToImageMap[widget.songInfo.filePath]
-          .addListener(_loadImageAsync);
-      setState(() {});
+      image = Variable.filePathToImageMap[widget.filePath].value;
+      Variable.filePathToImageMap[widget.filePath].addListener(_loadImageAsync);
     }
     super.didUpdateWidget(oldWidget);
   }
@@ -42,16 +37,15 @@ class _SongTileArtworkState extends State<SongTileArtwork> {
   void initState() {
     // TODO: implement initState
     super.initState();
-    Variable.getArtworkAsync(path: widget.songInfo.filePath);
-    image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
-    Variable.filePathToImageMap[widget.songInfo.filePath]
-        .addListener(_loadImageAsync);
+    Variable.getArtworkAsync(filePath: widget.filePath);
+    image = Variable.filePathToImageMap[widget.filePath].value;
+    Variable.filePathToImageMap[widget.filePath].addListener(_loadImageAsync);
   }
 
   @override
   void dispose() {
     // TODO: implement dispose
-    Variable.filePathToImageMap[widget.songInfo.filePath]
+    Variable.filePathToImageMap[widget.filePath]
         .removeListener(_loadImageAsync);
     super.dispose();
   }
@@ -61,11 +55,12 @@ class _SongTileArtworkState extends State<SongTileArtwork> {
     // TODO: implement build
     return AspectRatio(
       aspectRatio: 1,
-      child: Card(
+      child: Material(
         clipBehavior: Clip.hardEdge,
         shape: RoundedRectangleBorder(borderRadius: Constants.borderRadius),
         child: AnimatedSwitcher(
           duration: Constants.defaultDuration,
+          layoutBuilder: Constants.expendLayoutBuilder,
           child: image == null
               ? Constants.emptyArtwork
               : Image(

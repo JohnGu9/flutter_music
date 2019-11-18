@@ -13,6 +13,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/animation.dart' show Curves;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
@@ -189,13 +190,15 @@ class CustomCupertinoPageRoute<T> extends PageRoute<T> {
 
   @override
   bool canTransitionFrom(TransitionRoute<dynamic> previousRoute) {
-    return previousRoute is CustomCupertinoPageRoute;
+//    return previousRoute is CustomCupertinoPageRoute;
+    return true;
   }
 
   @override
   bool canTransitionTo(TransitionRoute<dynamic> nextRoute) {
     // Don't perform outgoing animation if the next route is a fullscreen dialog.
-    return nextRoute is CustomCupertinoPageRoute && !nextRoute.fullscreenDialog;
+//    return nextRoute is CustomCupertinoPageRoute && !nextRoute.fullscreenDialog;
+    return true;
   }
 
   Future transitionInProgress() async {
@@ -259,7 +262,6 @@ class CustomCupertinoPageRoute<T> extends PageRoute<T> {
       return false;
     // If we're in a gesture already, we cannot start another.
     if (isPopGestureInProgress(route)) return false;
-
     // Looks like a back gesture would be welcome!
     return true;
   }
@@ -388,6 +390,7 @@ class CupertinoPageTransition extends StatelessWidget {
                     reverseCurve: Curves.easeInToLinear,
                   ))
             .drive(_kRightMiddleTween),
+        this.secondaryRouteAnimation = secondaryRouteAnimation,
 //        _opacityAnimation =
 //            Tween(begin: 0.0, end: 1.0).animate(primaryRouteAnimation),
 //        _secondaryPositionAnimation = (linearTransition
@@ -409,6 +412,7 @@ class CupertinoPageTransition extends StatelessWidget {
 
   // When this page is coming in to cover another page.
   final Animation<Offset> _primaryPositionAnimation;
+  final Animation secondaryRouteAnimation;
 
 //  // When this page is becoming covered by another page.
 //  final Animation<Offset> _secondaryPositionAnimation;
@@ -439,10 +443,34 @@ class CupertinoPageTransition extends StatelessWidget {
 //        ),
 //      ),
 //    );
-    return SlideTransition(
-      position: _primaryPositionAnimation,
-      textDirection: textDirection,
-      child: child,
+    return AnimatedBuilder(
+      animation: secondaryRouteAnimation,
+      builder: (BuildContext context, Widget child) {
+        return Container(
+          foregroundDecoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color.fromRGBO(0, 0, 0, 0),
+                Theme.of(context)
+                    .backgroundColor
+                    .withOpacity(secondaryRouteAnimation.value ),
+                Theme.of(context)
+                    .backgroundColor
+                    .withOpacity(secondaryRouteAnimation.value ),
+              ],
+              stops: [0.0,0.9, 1.0],
+            ),
+          ),
+          child: child,
+        );
+      },
+      child: SlideTransition(
+        position: _primaryPositionAnimation,
+        textDirection: textDirection,
+        child: child,
+      ),
     );
   }
 }

@@ -8,6 +8,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
 //import 'debug.dart';
 //import 'material.dart';
@@ -67,12 +68,13 @@ class CustomReorderableListView extends StatefulWidget {
     this.reverse = false,
     this.onDragStart,
     this.onDragEnd,
-  })  : assert(scrollDirection != null),
+  })
+      : assert(scrollDirection != null),
         assert(onReorder != null),
         assert(children != null),
         assert(
-          children.every((Widget w) => w.key != null),
-          'All children of this widget must have a key.',
+        children.every((Widget w) => w.key != null),
+        'All children of this widget must have a key.',
         ),
         super(key: key);
 
@@ -135,7 +137,7 @@ class CustomReorderableListView extends StatefulWidget {
 class _CustomReorderableListViewState extends State<CustomReorderableListView> {
   // We use an inner overlay so that the dragging list item doesn't draw outside of the list itself.
   final GlobalKey _overlayKey =
-      GlobalKey(debugLabel: '$CustomReorderableListView overlay key');
+  GlobalKey(debugLabel: '$CustomReorderableListView overlay key');
 
   // This entry contains the scrolling list itself.
   OverlayEntry _listOverlayEntry;
@@ -216,16 +218,16 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
   static const double _defaultDropAreaExtent = 150.0;
 
   // The additional margin to place around a computed drop area.
-  static const double _dropAreaMargin = 8.0;
+  static const double _dropAreaMargin = 0.0;
 
   // How long an animation to reorder an element in the list takes.
   static const Duration _reorderAnimationDuration =
-      const Duration(milliseconds: 200);
+  const Duration(milliseconds: 200);
 
   // How long an animation to scroll to an off-screen element in the
   // list takes.
   static const Duration _scrollAnimationDuration =
-      const Duration(milliseconds: 200);
+  const Duration(milliseconds: 200);
 
   // Controls scrolls and measures scroll progress.
   ScrollController _scrollController;
@@ -329,7 +331,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
     if (_scrolling) return;
     final RenderObject contextObject = context.findRenderObject();
     final RenderAbstractViewport viewport =
-        RenderAbstractViewport.of(contextObject);
+    RenderAbstractViewport.of(contextObject);
     assert(viewport != null);
     // If and only if the current scroll offset falls in-between the offsets
     // necessary to reveal the selected context at the top or bottom of the
@@ -338,11 +340,15 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
     final double scrollOffset = _scrollController.offset;
     final double topOffset = max(
       _scrollController.position.minScrollExtent,
-      viewport.getOffsetToReveal(contextObject, 0.0).offset - margin,
+      viewport
+          .getOffsetToReveal(contextObject, 0.0)
+          .offset - margin,
     );
     final double bottomOffset = min(
       _scrollController.position.maxScrollExtent,
-      viewport.getOffsetToReveal(contextObject, 1.0).offset + margin,
+      viewport
+          .getOffsetToReveal(contextObject, 1.0)
+          .offset + margin,
     );
     final bool onScreen =
         scrollOffset <= topOffset && scrollOffset >= bottomOffset;
@@ -367,6 +373,17 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
   // Wraps children in Row or Column, so that the children flow in
   // the widget's scrollDirection.
   Widget _buildContainerForScrollDirection({List<Widget> children}) {
+    children = AnimationConfiguration.toStaggeredList(
+        duration: const Duration(milliseconds: 375),
+        childAnimationBuilder: (widget) =>
+            SlideAnimation(
+              horizontalOffset: 50.0,
+              child: FadeInAnimation(
+                child: widget,
+              ),
+            ),
+        children: children,
+    );
     switch (widget.scrollDirection) {
       case Axis.horizontal:
         return Row(children: children);
@@ -387,46 +404,40 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
     // state of the dragging item.
 
     // Starts dragging toWrap.
-    void onDragStarted() {
-      Feedback.forLongPress(context);
-      setState(() {
-        _dragging = toWrap.key;
-        _dragStartIndex = index;
-        _ghostIndex = index;
-        _currentIndex = index;
-        _entranceController.value = 1.0;
-        _draggingFeedbackSize = keyIndexGlobalKey.currentContext.size;
-        if (widget?.onDragStart != null) {
-          widget?.onDragStart();
-        }
-      });
-    }
+    void onDragStarted() =>
+        setState(() {
+          Feedback.forLongPress(context);
+          _dragging = toWrap.key;
+          _dragStartIndex = index;
+          _ghostIndex = index;
+          _currentIndex = index;
+          _entranceController.value = 1.0;
+          _draggingFeedbackSize = keyIndexGlobalKey.currentContext.size;
+          if (widget?.onDragStart != null) widget?.onDragStart();
+        });
 
     // Places the value from startIndex one space before the element at endIndex.
-    void reorder(int startIndex, int endIndex) {
-      setState(() {
-        if (startIndex != endIndex) widget.onReorder(startIndex, endIndex);
-        // Animates leftover space in the drop area closed.
-        // TODO(djshuckerow): bring the animation in line with the Material
-        // specifications.
-        _ghostController.reverse(from: 0.1);
-        _entranceController.reverse(from: 0.1);
-        _dragging = null;
-      });
-    }
+    void reorder(int startIndex, int endIndex) =>
+        setState(() {
+          if (startIndex != endIndex) widget.onReorder(startIndex, endIndex);
+          // Animates leftover space in the drop area closed.
+          // TODO(djshuckerow): bring the animation in line with the Material
+          // specifications.
+          _ghostController.reverse(from: 0.1);
+          _entranceController.reverse(from: 0.1);
+          _dragging = null;
+        });
 
     // Drops toWrap into the last position it was hovering over.
     void onDragEnded() {
       reorder(_dragStartIndex, _currentIndex);
-      if (widget?.onDragEnd != null) {
-        widget.onDragEnd();
-      }
+      if (widget?.onDragEnd != null) widget.onDragEnd();
     }
 
     Widget wrapWithSemantics() {
       // First, determine which semantics actions apply.
       final Map<CustomSemanticsAction, VoidCallback> semanticsActions =
-          <CustomSemanticsAction, VoidCallback>{};
+      <CustomSemanticsAction, VoidCallback>{};
 
       // Create the appropriate semantics actions.
       void moveToStart() => reorder(index, 0);
@@ -437,7 +448,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
       void moveAfter() => reorder(index, index + 2);
 
       final MaterialLocalizations localizations =
-          MaterialLocalizations.of(context);
+      MaterialLocalizations.of(context);
 
       // If the item can move to before its current position in the list.
       if (index > 0) {
@@ -464,7 +475,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
         semanticsActions[CustomSemanticsAction(label: reorderItemAfter)] =
             moveAfter;
         semanticsActions[
-                CustomSemanticsAction(label: localizations.reorderItemToEnd)] =
+        CustomSemanticsAction(label: localizations.reorderItemToEnd)] =
             moveToEnd;
       }
 
@@ -492,6 +503,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
       // We build the draggable inside of a layout builder so that we can
       // constrain the size of the feedback dragging widget.
       Widget child = LongPressDraggable<Key>(
+        hapticFeedbackOnStart: true,
         maxSimultaneousDrags: 1,
         axis: widget.scrollDirection,
         data: toWrap.key,
@@ -590,58 +602,65 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
     // We use the layout builder to constrain the cross-axis size of dragging child widgets.
     return LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
-      final List<Widget> wrappedChildren = <Widget>[];
-      if (widget.header != null) {
-        wrappedChildren.add(widget.header);
-      }
-      for (int i = 0; i < widget.children.length; i += 1) {
-        wrappedChildren.add(_wrap(context, widget.children[i], i, constraints));
-      }
-      const Key endWidgetKey = Key('DraggableList - End Widget');
-      Widget finalDropArea;
-      switch (widget.scrollDirection) {
-        case Axis.horizontal:
-          finalDropArea = SizedBox(
-            key: endWidgetKey,
-            width: _defaultDropAreaExtent,
-            height: constraints.maxHeight,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: widget.end,
-            ),
-          );
-          break;
-        case Axis.vertical:
-        default:
-          finalDropArea = SizedBox(
-            key: endWidgetKey,
-            height: _defaultDropAreaExtent,
-            width: constraints.maxWidth ?? MediaQuery.of(context).size.width,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: widget.end,
-            ),
-          );
-          break;
-      }
-      if (widget.reverse) {
-        wrappedChildren.insert(
-          0,
-          _wrap(context, finalDropArea, widget.children.length, constraints),
-        );
-      } else {
-        wrappedChildren.add(
-          _wrap(context, finalDropArea, widget.children.length, constraints),
-        );
-      }
+          final List<Widget> wrappedChildren = <Widget>[];
+          if (widget.header != null) {
+            wrappedChildren.add(widget.header);
+          }
+          for (int i = 0; i < widget.children.length; i += 1) {
+            wrappedChildren.add(
+                _wrap(context, widget.children[i], i, constraints));
+          }
+          const Key endWidgetKey = Key('DraggableList - End Widget');
+          Widget finalDropArea;
+          switch (widget.scrollDirection) {
+            case Axis.horizontal:
+              finalDropArea = SizedBox(
+                key: endWidgetKey,
+                width: _defaultDropAreaExtent,
+                height: constraints.maxHeight,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: widget.end,
+                ),
+              );
+              break;
+            case Axis.vertical:
+            default:
+              finalDropArea = SizedBox(
+                key: endWidgetKey,
+                width: constraints.maxWidth ?? MediaQuery
+                    .of(context)
+                    .size
+                    .width,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: widget.end,
+                ),
+              );
+              break;
+          }
+          if (widget.reverse) {
+            wrappedChildren.insert(
+              0,
+              _wrap(
+                  context, finalDropArea, widget.children.length, constraints),
+            );
+          } else {
+            wrappedChildren.add(
+              _wrap(
+                  context, finalDropArea, widget.children.length, constraints),
+            );
+          }
 
-      return SingleChildScrollView(
-        scrollDirection: widget.scrollDirection,
-        child: _buildContainerForScrollDirection(children: wrappedChildren),
-        padding: widget.padding,
-        controller: _scrollController,
-        reverse: widget.reverse,
-      );
-    });
+          return SingleChildScrollView(
+            scrollDirection: widget.scrollDirection,
+            child: AnimationLimiter(
+                child:
+                _buildContainerForScrollDirection(children: wrappedChildren)),
+            padding: widget.padding,
+            controller: _scrollController,
+            reverse: widget.reverse,
+          );
+        });
   }
 }

@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_app/plugin/ExtendPlugin.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
@@ -21,7 +24,7 @@ class DatabaseKey<T> {
 
   static final typeMap = {
     const DatabaseKey<String>().runtimeType: 'TEXT',
-    uInt8ListType: 'TEXT',
+    uInt8ListType: 'BLOB',
     const DatabaseKey<int>().runtimeType: 'INTEGER',
     const DatabaseKey<bool>().runtimeType: 'BIT',
     const DatabaseKey<double>().runtimeType: 'REAL',
@@ -29,18 +32,10 @@ class DatabaseKey<T> {
   };
 
   dataDecode(dynamic data) {
-    if (this.runtimeType == uInt8ListType) {
-      assert(data is String);
-      return Uint8List.fromList(data.codeUnits);
-    }
     return data;
   }
 
   dataEncode(dynamic data) {
-    if (this.runtimeType == uInt8ListType) {
-      assert(data is Uint8List);
-      return String.fromCharCodes(data);
-    }
     return data;
   }
 
@@ -317,15 +312,9 @@ class LinkedList<T> {
 
   indexOf(T element) => list.indexOf(element);
 
-  reorder(int oldIndex, int newIndex) async {
-    if (oldIndex == newIndex) {
-      return;
-    } else if (oldIndex < newIndex) {
-      insert(newIndex - 1, removeAt(oldIndex));
-    } else {
-      insert(newIndex, removeAt(oldIndex));
-    }
-  }
+  reorder(int oldIndex, int newIndex) async => (oldIndex < newIndex)
+      ? insert(newIndex - 1, removeAt(oldIndex))
+      : insert(newIndex, removeAt(oldIndex));
 
   sync(
     Iterable iterable, {
@@ -386,6 +375,139 @@ class LinkedList<T> {
   }
 }
 
+class ImageTable {
+  ImageTable(
+      this.database, this.table, this.primaryKey, this.keys, this.imagePath);
+
+  final Database database;
+  final String table;
+  final DatabaseKey primaryKey;
+  final List<DatabaseKey> keys;
+  final String imagePath;
+
+  static Future<Database> easeDatabase(String name) async =>
+      openDatabase(path.join(await getDatabasesPath(), '$name.db'));
+
+  static Future<ImageTable> easeTable({
+    @required String database,
+    @required String table,
+    @required DatabaseKey primaryKey,
+    @required List<DatabaseKey<String>> keys,
+    bool drop = false,
+  }) async {
+    final res = ImageTable(await easeDatabase(database), table, primaryKey,
+        keys, path.join(await getDatabasesPath(), 'images'));
+    if (!await Directory(res.imagePath).exists())
+      Directory(res.imagePath).create();
+
+    await Future.wait(
+        [Directory(res.imagePath).createTemp(), res.bindTable(drop: drop)]);
+    return res;
+  }
+
+  String generateStructure() {
+    String res = "(";
+    res += primaryKey.toPrimaryString();
+    for (final key in keys) {
+      res += key.toString();
+    }
+    return res + ")";
+  }
+
+  Future bindTable({bool drop = false}) async {
+    /// [drop] whether drop the table exists
+    if (drop) {
+      await database.execute("drop table if exists $table");
+    }
+    await database
+        .execute("CREATE TABLE IF NOT EXISTS $table" + generateStructure());
+  }
+
+  dropTable() async {
+    Stream list = Directory(imagePath).list();
+    await for (final item in list) {
+      await item.delete();
+    }
+
+    await database.execute("drop table if exists $table");
+    await database
+        .execute("CREATE TABLE IF NOT EXISTS $table" + generateStructure());
+  }
+
+  static const String fileFormat = '.jpg';
+
+  setData(Map data) async {
+    assert(data.containsKey(primaryKey.keyName));
+    Map<String, String> _data = Map();
+    _data[primaryKey.keyName] = data[primaryKey.keyName];
+    for (final key in keys) {
+      /// store image path
+      String subName = _data[primaryKey.keyName].split('/').last;
+      subName = subName.split('.').first + '-';
+      _data[key.keyName] =
+          path.join(imagePath, subName + key.keyName + fileFormat);
+
+      /// store image as file (database can't store large image)
+      await ExtendPlugin.saveJpegFile(
+          filePath: _data[key.keyName], bytes: data[key.keyName]);
+    }
+    await database.insert(table, _data,
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<Map> getData(primaryKeyValue) async {
+    List<Map> _maps = await database.query(table,
+        where: primaryKey.toWhereString(),
+        whereArgs: [primaryKeyValue],
+        limit: 1);
+    if (_maps.isEmpty) {
+      return null;
+    }
+    Map map = Map();
+    map[primaryKey.keyName] =
+        primaryKey.dataDecode(_maps[0][primaryKey.keyName]);
+    for (final key in keys) {
+      final file = File(_maps[0][key.keyName]);
+      if (!await file.exists()) {
+        await database.delete(
+          table,
+          where: primaryKey.toWhereString(),
+          whereArgs: [primaryKeyValue],
+        );
+        return null;
+      }
+      map[key.keyName] = await ExtendPlugin.readJpegFile(filePath: file.path);
+    }
+    return map;
+  }
+
+  removeData({primaryKeyValue}) async {
+    List<Map> _maps = await database.query(table,
+        where: primaryKey.toWhereString(),
+        whereArgs: [primaryKeyValue],
+        limit: 1);
+    for (final key in keys) {
+      final file = File(_maps[0][key.keyName]);
+      file.delete();
+    }
+    await database.delete(
+      table,
+      where: primaryKey.toWhereString(),
+      whereArgs: [primaryKeyValue],
+    );
+  }
+
+  Future<int> getSize() async {
+    int len = 0;
+    Stream list = Directory(imagePath).list();
+    await for (final FileSystemEntity file in list) {
+      if (await FileSystemEntity.isFile(file.path))
+        len += await File(file.path).length();
+    }
+    return len;
+  }
+}
+
 class Table {
   Table(this.database, this.table, this.primaryKey, this.keys);
 
@@ -397,7 +519,7 @@ class Table {
   static Future<Database> easeDatabase(String name) async =>
       openDatabase(path.join(await getDatabasesPath(), '$name.db'));
 
-  static Future<Table> easeTable<T>({
+  static Future<Table> easeTable({
     @required String database,
     @required String table,
     @required DatabaseKey primaryKey,
@@ -427,6 +549,12 @@ class Table {
         .execute("CREATE TABLE IF NOT EXISTS $table" + generateStructure());
   }
 
+  dropTable() async {
+    await database.execute("drop table if exists $table");
+    await database
+        .execute("CREATE TABLE IF NOT EXISTS $table" + generateStructure());
+  }
+
   setData(Map data) async {
     assert(data.containsKey(primaryKey.keyName));
     Map<String, dynamic> _data = Map();
@@ -441,9 +569,9 @@ class Table {
   Future<Map> getData(primaryKeyValue) async {
     List<Map> _maps = await database.query(table,
         where: primaryKey.toWhereString(),
-        whereArgs: [primaryKey.dataDecode(primaryKeyValue)],
+        whereArgs: [primaryKey.dataEncode(primaryKeyValue)],
         limit: 1);
-    if(_maps.isEmpty) {
+    if (_maps.isEmpty) {
       return null;
     }
     Map map = Map();
@@ -460,15 +588,19 @@ class Table {
       await database.delete(
         table,
         where: primaryKey.toWhereString(),
-        whereArgs: [primaryKey.dataDecode(data[primaryKey.keyName])],
+        whereArgs: [primaryKey.dataEncode(data[primaryKey.keyName])],
       );
     } else if (primaryKeyValue != null) {
       await database.delete(
         table,
         where: primaryKey.toWhereString(),
-        whereArgs: [primaryKey.dataDecode(primaryKeyValue)],
+        whereArgs: [primaryKey.dataEncode(primaryKeyValue)],
       );
     }
+  }
+
+  Future<int> getSize() async {
+    return File(database.path).length();
   }
 }
 

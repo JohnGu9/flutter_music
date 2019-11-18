@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show MethodCall, MethodChannel;
 import 'package:flutter_app/component/CustomValueNotifier.dart';
 
@@ -98,7 +99,7 @@ class MediaPlayer {
     }
   }
 
-  static onPlayAndPause() => status == MediaPlayerStatus.started
+  static Function onPlayAndPause = () => status == MediaPlayerStatus.started
       ? MediaPlayer.pause()
       : MediaPlayer.start();
 
@@ -224,6 +225,7 @@ class MediaPlayer {
     if (path == null) {
       return;
     }
+    _stateUpdate(MediaPlayerStatus.preparing);
     currentMedia = path;
     MediaPlayerChannel.invokeMethod('setDataSource', {'path': path})
         .catchError((error) {
@@ -307,8 +309,19 @@ class MediaPlayer {
       await MediaPlayerChannel.invokeMethod('setVolume', {'volume': _volume});
 
   static updateNotification(
-      String title, String artist, String album, Uint8List artwork) async {
-    await MediaPlayerChannel.invokeMethod('updateNotification',
-        {'title': title, 'artist': artist, 'album': album, 'artwork': artwork});
+          String title, String artist, String album, Uint8List artwork) async {
+    return await MediaPlayerChannel.invokeMethod('updateNotification', {
+        'title': title,
+        'artist': artist,
+        'album': album,
+        'artwork': artwork
+      });
   }
+
+  static cancelNotification() async =>
+      await MediaPlayerChannel.invokeMethod('cancelNotification');
+
+  static notificationSwitch(bool value) async =>
+      await MediaPlayerChannel.invokeMethod(
+          'notificationSwitch', {'value': value});
 }

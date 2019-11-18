@@ -1,6 +1,8 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../../data/Constants.dart';
 
 class BasicViewPage extends StatelessWidget {
@@ -18,9 +20,10 @@ class BasicViewPage extends StatelessWidget {
     // TODO: implement build
     return WillPopScope(
       onWillPop: _onWillPop,
-      child: Container(
-        color: Colors.black38,
-        child: Column(
+      child: Scaffold(
+        resizeToAvoidBottomPadding: true,
+        backgroundColor: Colors.transparent,
+        body: Column(
           mainAxisSize: MainAxisSize.max,
           children: <Widget>[
             MainContent(child: child),

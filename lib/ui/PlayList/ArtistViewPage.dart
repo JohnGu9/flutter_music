@@ -4,35 +4,35 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
-import '../../component/TransparentPageRoute.dart';
+
+import '../../component/CustomPageRoute.dart';
 import '../../data/Constants.dart';
 import '../../data/Variable.dart';
-import 'BasicViewPage.dart';
-
+import 'AlbumViewItem.dart';
 import 'AlbumViewPage.dart';
+import 'BasicViewPage.dart';
 import 'SongTIleArtwork.dart';
 import 'SongViewPage.dart';
-import 'AlbumViewItem.dart';
-
-pushArtistViewPage(BuildContext context, ArtistInfo artistInfo) async {
-  await SchedulerBinding.instance.endOfFrame;
-  Future.microtask(
-        () =>
-        Navigator.push(
-          context,
-          TransparentRoute(
-            builder: (BuildContext context) =>
-                ArtistViewPage(
-                  artist: artistInfo,
-                ),
-          ),
-        ),
-  );
-}
 
 class ArtistViewPage extends StatefulWidget {
   const ArtistViewPage({Key key, this.artist}) : super(key: key);
   final ArtistInfo artist;
+
+  /// This page feature certain transition animation
+  /// Push router action with fixed animation are integrated in [ArtistViewPage]
+  static pushPage(BuildContext context, ArtistInfo artistInfo) async {
+    await SchedulerBinding.instance.endOfFrame;
+    Future.microtask(
+      () => Navigator.push(
+        context,
+        CustomPageRoute(
+          builder: (BuildContext context) => ArtistViewPage(
+            artist: artistInfo,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   _ArtistViewPageState createState() => _ArtistViewPageState();
@@ -56,28 +56,19 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
       pinned: true,
       elevation: 4.0,
       automaticallyImplyLeading: false,
-      expandedHeight: MediaQuery
-          .of(context)
-          .size
-          .width / 1.2,
-      backgroundColor: Theme
-          .of(context)
-          .backgroundColor,
+      expandedHeight: MediaQuery.of(context).size.width / 1.2,
+      backgroundColor: Theme.of(context).backgroundColor,
       flexibleSpace: FlexibleSpaceBar(
         collapseMode: CollapseMode.pin,
         centerTitle: true,
         title: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width/2),
+          constraints:
+              BoxConstraints(maxWidth: MediaQuery.of(context).size.width / 2),
           child: AutoSizeText(
             widget.artist.name,
             style: Constants.textStyleWithShadow(
-              Theme
-                  .of(context)
-                  .textTheme
-                  .body1,
-              Theme
-                  .of(context)
-                  .brightness == Brightness.light
+              Theme.of(context).textTheme.body1,
+              Theme.of(context).brightness == Brightness.light
                   ? Colors.white
                   : Colors.black,
             ),
@@ -107,9 +98,7 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
   }
 
   Widget _valueListenableBuilder(BuildContext context, int page, Widget child) {
-    Color color = Theme
-        .of(context)
-        .brightness == Brightness.light
+    Color color = Theme.of(context).brightness == Brightness.light
         ? Constants.darkGrey
         : Constants.lightGrey;
     return Row(
@@ -134,37 +123,32 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
   }
 
   Widget _itemBuilder(BuildContext context, int index) {
-    if (index >= Variable.artistIdToSongsMap[widget.artist.id].length) {
+    if (index >=
+        Variable.artistIdToSongPathsMap[widget.artist.id].value.length) {
       return null;
     }
-    final String songInfo =
-    Variable.artistIdToSongsMap[widget.artist.id][index];
+    final String filePath =
+        Variable.artistIdToSongPathsMap[widget.artist.id].value[index];
     return ListTile(
       leading: SongTileArtwork(
-        songInfo: Variable.filePathToSongMap[songInfo],
+        filePath: filePath,
       ),
       title: AutoSizeText(
-        Variable.filePathToSongMap[songInfo].title,
-        style: Theme
-            .of(context)
-            .textTheme
-            .body1,
+        Variable.filePathToSongMap[filePath].title,
+        style: Theme.of(context).textTheme.body1,
         maxLines: 1,
       ),
       subtitle: AutoSizeText(
-        Variable.filePathToSongMap[songInfo].album,
-        style: Theme
-            .of(context)
-            .textTheme
-            .body2,
+        Variable.filePathToSongMap[filePath].album,
+        style: Theme.of(context).textTheme.body2,
         maxLines: 1,
       ),
       trailing: IconButton(
           icon: Icon(Icons.more_horiz),
-          onPressed: () => pushSongViewPage(context, Variable.filePathToSongMap[songInfo])),
-      onTap: () =>
-          Variable.setCurrentSong(
-              Variable.artistIdToSongsMap[widget.artist.id], songInfo),
+          onPressed: () =>
+              pushSongViewPage(context, Variable.filePathToSongMap[filePath])),
+      onTap: () => Variable.setCurrentSong(
+          Variable.artistIdToSongPathsMap[widget.artist.id].value, filePath),
     );
   }
 
@@ -174,22 +158,21 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
       shape: RoundedRectangleBorder(
         borderRadius: Constants.borderRadius,
       ),
-      color: Theme
-          .of(context)
-          .primaryColor,
+      color: Theme.of(context).primaryColor,
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
           imagesMap[albums[index]] == null
               ? Constants.emptyArtwork
               : Image(
-            image: imagesMap[albums[index]],
-            fit: BoxFit.contain,
-            alignment: Alignment.topCenter,
+                  image: imagesMap[albums[index]],
+                  fit: BoxFit.contain,
+                  alignment: Alignment.topCenter,
+                ),
+          ForegroundView(
+            album: albums[index],
+            onTap: () => AlbumViewPage.pushPage(context, albums[index]),
           ),
-          ForegroundView(album: albums[index], onTap: () =>
-            pushAlbumViewPage(context, albums[index], imagesMap[albums[index]])
-          ,),
         ],
       ),
     );
@@ -199,11 +182,11 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
     Variable.albumToSongsMapLoading ??= Variable.generalMapAlbumToSongs();
     await Variable.albumToSongsMapLoading;
     albums =
-    await Variable.audioQuery.getAlbumsFromArtist(artist: widget.artist);
+        await Variable.audioQuery.getAlbumsFromArtist(artist: widget.artist);
     imagesMap = Map();
     for (int i = 0; i < albums.length;) {
       await SchedulerBinding.instance.endOfFrame;
-      final songs = Variable.albumIdToSongsMap[albums[i].id];
+      final songs = Variable.albumIdToSongPathsMap[albums[i].id].value;
       if (songs == null) {
         albums.removeAt(i);
       } else {
@@ -213,10 +196,10 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
     }
     for (final AlbumInfo albumInfo in albums) {
       await SchedulerBinding.instance.endOfFrame;
-      final songs = Variable.albumIdToSongsMap[albumInfo.id];
+      final songs = Variable.albumIdToSongPathsMap[albumInfo.id].value;
       // load first available image
       imagesMap[albumInfo] =
-      songs == null ? null : await Variable.getImageFromSongs(songs);
+          songs == null ? null : await Variable.getImageFromSongs(songs);
     }
     setState(() => _dirty = true);
   }
@@ -254,7 +237,7 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
     super.dispose();
     _scrollController.dispose();
     _pageController.dispose();
-    Future.delayed(TransparentRouteTransitionDuration, _currentPage.dispose);
+    Future.delayed(CustomRouteTransitionDuration, _currentPage.dispose);
   }
 
   Widget built;
@@ -276,22 +259,20 @@ class _ArtistViewPageState extends State<ArtistViewPage> {
       child: GeneralPanel(
         child: Hero(
           tag: widget.artist.hashCode.toString() + 'artist',
-          flightShuttleBuilder: Constants
-              .targetAndSourceFadeInOutFlightShuttleBuilder,
+          flightShuttleBuilder:
+              Constants.targetAndSourceFadeInOutFlightShuttleBuilder,
           child: Material(
             elevation: 0.0,
             borderRadius: Constants.borderRadius,
-            color: Theme
-                .of(context)
-                .backgroundColor
+            color: Theme.of(context)
+                .primaryColor
                 .withOpacity(Constants.panelOpacity),
             child: NestedScrollView(
               controller: _scrollController,
               headerSliverBuilder: _headerSliverBuilder,
               body: PageView(
                 controller: _pageController,
-                onPageChanged: (int page) =>
-                _currentPage.value = page,
+                onPageChanged: (int page) => _currentPage.value = page,
                 children: <Widget>[
                   ListView.builder(
                     itemBuilder: _itemBuilder,
@@ -317,12 +298,10 @@ class _SliverPersistentHeaderDelegate extends SliverPersistentHeaderDelegate {
   _SliverPersistentHeaderDelegate(this.child);
 
   @override
-  Widget build(BuildContext context, double shrinkOffset,
-      bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Material(
-        color: Theme
-            .of(context)
-            .backgroundColor,
+        color: Theme.of(context).backgroundColor,
         shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.only(
                 bottomLeft: Constants.radius, bottomRight: Constants.radius)),

@@ -11,14 +11,48 @@ import 'plugin/MediaPlayer.dart';
 import 'ui/Panel/Panel.dart';
 import 'ui/PlayList/PlayList.dart';
 
-void main() async {
-  Variable.mediaPlayerInitialization = mediaPlayerSetup();
-  runApp(const MyApp());
-}
+void main() => runApp(const MyApp());
 
 bool _shouldUpdatePreparedListener = true;
 
 mediaPlayerSetup() async {
+  Variable.notificationPlayBackSwitch.addListener(() async {
+    await MediaPlayer.notificationSwitch(
+        Variable.notificationPlayBackSwitch.value);
+    if (Variable.notificationPlayBackSwitch.value &&
+        Variable.currentItem.value != null) {
+      await Variable.getArtworkAsync(filePath: Variable.currentItem.value);
+      SongInfo songInfo =
+          Variable.filePathToSongMap[Variable.currentItem.value];
+      MemoryImage image = Variable.filePathToImageMap[songInfo.filePath].value;
+      MediaPlayer.updateNotification(
+          songInfo.title, songInfo.artist, songInfo.album, image?.bytes);
+    } else {
+      MediaPlayer.cancelNotification();
+    }
+  });
+
+  MediaPlayer.onPlayAndPause = () {
+    if (MediaPlayer.status == MediaPlayerStatus.started) {
+      MediaPlayer.pause();
+    } else {
+      MediaPlayer.start();
+      final RecentLog recentLog = RecentLog(
+          filePath: Variable.currentItem.value,
+          playList: Variable.currentList.value);
+      if (Variable.recentLogs.value.contains(recentLog)) {
+        Variable.recentLogs.value
+            .removeAt(Variable.recentLogs.value.indexOf(recentLog));
+      }
+
+      Variable.recentLogs.value.insert(0, recentLog);
+
+      if (Variable.recentLogs.value.length > 10)
+        Variable.recentLogs.value.removeLast();
+      print(Variable.recentLogs.value);
+    }
+  };
+
   /// Prevent update currentItem while pageRoute is in transition.
   /// Warning: if update currentItem while pageRoute is in transition, it will cause [Hero] widget break down.
   Variable.pageRouteTransition =
@@ -27,7 +61,7 @@ mediaPlayerSetup() async {
   Variable.beforeSetCurrentSong = () {
     if (_shouldUpdatePreparedListener) {
       MediaPlayer.status == MediaPlayerStatus.started
-          ? MediaPlayer.setOnPreparedListener(MediaPlayer.start)
+          ? MediaPlayer.setOnPreparedListener(MediaPlayer.onPlayAndPause)
           : MediaPlayer.removeOnPreparedListener();
     }
   };
@@ -35,11 +69,25 @@ mediaPlayerSetup() async {
   Variable.currentItem.addListener(_currentItemChanged);
 
   MediaPlayer.setOnStateChangeListener((state, preState) {
-    state == MediaPlayerStatus.started
-        ? Variable.playButtonController
-            .animateTo(1.0, curve: Curves.fastOutSlowIn)
-        : Variable.playButtonController
+    switch (state) {
+      case MediaPlayerStatus.started:
+        Variable.playButtonController
+            .animateTo(1.0, curve: Curves.fastOutSlowIn);
+        break;
+      case MediaPlayerStatus.preparing:
+      case MediaPlayerStatus.prepared:
+        // TODO: Handle this case.
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (MediaPlayer.status != MediaPlayerStatus.started)
+            Variable.playButtonController
+                .animateTo(0.0, curve: Curves.fastOutSlowIn);
+        });
+        break;
+      default:
+        Variable.playButtonController
             .animateTo(0.0, curve: Curves.fastOutSlowIn);
+        break;
+    }
   });
 
   MediaPlayer.setOnCompletionListener(_onCompletionListener);
@@ -83,10 +131,10 @@ mediaPlayerSetup() async {
 _currentItemChanged() async {
   String path = Variable.currentItem.value;
   MediaPlayer.setDataSource(path);
-  await Variable.getArtworkAsync(path: path);
-  SongInfo songInfo = Variable.filePathToSongMap[path];
-  MemoryImage image = Variable.filePathToImageMap[path].value;
-  await MediaPlayer.updateNotification(
+  await Variable.getArtworkAsync(filePath: path);
+  SongInfo songInfo = Variable.filePathToSongMap[Variable.currentItem.value];
+  MemoryImage image = Variable.filePathToImageMap[songInfo.filePath].value;
+  MediaPlayer.updateNotification(
       songInfo.title, songInfo.artist, songInfo.album, image?.bytes);
 }
 
@@ -153,18 +201,40 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
+  ThemeData light;
+  ThemeData dark;
+
+  _onChangeTheme() => setState(_changeTheme);
+
+  _changeTheme() {
+    if (Variable.themeSwitch.value == Variable.lightTheme) {
+      light = Constants.customLightTheme;
+      dark = null;
+    } else if (Variable.themeSwitch.value == Variable.darkTheme) {
+      light = Constants.customDarkTheme;
+      dark = null;
+    } else {
+      light = Constants.customLightTheme;
+      dark = Constants.customDarkTheme;
+    }
+  }
+
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
+    Variable.mediaPlayerInitialization ??= mediaPlayerSetup();
     Variable.playButtonController =
         AnimationController(vsync: this, duration: Constants.defaultDuration);
+    _changeTheme();
+    Variable.themeSwitch.addListener(_onChangeTheme);
   }
 
   @override
   void dispose() {
     // TODO: implement dispose
     Variable.playButtonController.dispose();
+    Variable.themeSwitch.removeListener(_onChangeTheme);
     super.dispose();
   }
 
@@ -172,8 +242,8 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: Constants.MaterialAppTitle,
-      theme: Constants.customLightTheme,
-      darkTheme: Constants.customDarkTheme,
+      theme: light,
+      darkTheme: dark,
       home: const MyHomePage(),
       debugShowCheckedModeBanner: false,
     );

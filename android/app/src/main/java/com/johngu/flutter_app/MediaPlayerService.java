@@ -62,7 +62,6 @@ public final class MediaPlayerService extends IntentService
     static private MediaSessionCompat.Callback mediaSessionCallBack;
     static private PlaybackStateCompat.Builder playbackStateBuilder;
     static private volatile PlaybackStateCompat playbackState;
-    static private MediaMetadataCompat.Builder mediaMetadata;
 
     static private AudioManager audioManager;
     static private AudioAttributes audioAttributes;
@@ -77,15 +76,12 @@ public final class MediaPlayerService extends IntentService
 
     static private NotificationManager notificationManager;
     private NotificationCompat.Builder notificationPendingBuilder;
-    static private Notification notificationPending;
     private NotificationCompat.Builder notificationActingBuilder;
-    static private Notification notificationActing;
 
     static private final Runnable onPlayRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "started");
     static private final Runnable onPauseRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "paused");
     static private final Runnable onPreviousRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("onPrevious", null);
     static private final Runnable onNextRunnable = () -> Constants.MediaPlayerMethodChannel.invokeMethod("onNext", null);
-    private final int updateNotificationPriority = Thread.MIN_PRIORITY + 1;
     private final Runnable updateNotificationRunnable = new Runnable() {
         @Override
         public void run() {
@@ -102,51 +98,61 @@ public final class MediaPlayerService extends IntentService
                 album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
             }
 
-            notificationPendingBuilder.setContentTitle(title);
-            notificationPendingBuilder.setContentText(artist);
-            notificationPendingBuilder.setSubText(album);
-
-            notificationActingBuilder.setContentTitle(title);
-            notificationActingBuilder.setContentText(artist);
-            notificationActingBuilder.setSubText(album);
-
-
-            Bitmap bitmap;
-            if (artwork != null) {
-                bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
-                notificationPendingBuilder.setLargeIcon(bitmap);
-                notificationActingBuilder.setLargeIcon(bitmap);
-                notificationPending = notificationPendingBuilder.build();
-                notificationActing = notificationActingBuilder.build();
-            } else {
-                bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_abstract);
-                notificationPendingBuilder.setLargeIcon(bitmap);
-                notificationActingBuilder.setLargeIcon(bitmap);
-                notificationPending = notificationPendingBuilder.build();
-                notificationActing = notificationActingBuilder.build();
-            }
 
             synchronized (this) {
                 if (filePath.equals(currentDataSource)) {
+                    Bitmap bitmap;
+                    if (artwork != null) {
+                        notificationPendingBuilder.setContentTitle(title);
+                        notificationPendingBuilder.setContentText(artist);
+                        notificationPendingBuilder.setSubText(album);
+
+                        notificationActingBuilder.setContentTitle(title);
+                        notificationActingBuilder.setContentText(artist);
+                        notificationActingBuilder.setSubText(album);
+
+                        bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
+                        notificationPendingBuilder.setLargeIcon(bitmap);
+                        notificationActingBuilder.setLargeIcon(bitmap);
+                    } else {
+                        notificationPendingBuilder.setContentTitle(title);
+                        notificationPendingBuilder.setContentText(artist);
+                        notificationPendingBuilder.setSubText(album);
+
+                        notificationActingBuilder.setContentTitle(title);
+                        notificationActingBuilder.setContentText(artist);
+                        notificationActingBuilder.setSubText(album);
+
+                        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_abstract);
+                        notificationPendingBuilder.setLargeIcon(bitmap);
+                        notificationActingBuilder.setLargeIcon(bitmap);
+                    }
+                    MediaMetadataCompat.Builder mediaMetadata = new MediaMetadataCompat.Builder();
+                    mediaMetadata.putString(MediaMetadata.METADATA_KEY_TITLE, title);
+                    mediaMetadata.putString(MediaMetadata.METADATA_KEY_ARTIST, artist);
+                    mediaMetadata.putString(MediaMetadata.METADATA_KEY_ALBUM, album);
+                    mediaMetadata.putLong(MediaMetadata.METADATA_KEY_DURATION, Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)));
+                    mediaSession.setMetadata(mediaMetadata.build());
+                }
+            }
+
+
+            synchronized (MediaPlayerService.this) {
+                if (filePath.equals(currentDataSource) && notificationSwitch) {
                     if (mediaPlayer.isPlaying()) {
                         mediaSession.setActive(true);
-                        notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+                        notificationManager.notify(MediaPlayerNotifyID, notificationActingBuilder.build());
                     } else {
                         mediaSession.setActive(false);
-                        notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+                        notificationManager.notify(MediaPlayerNotifyID, notificationPendingBuilder.build());
                     }
                 }
             }
-            mediaMetadata = new MediaMetadataCompat.Builder();
-            mediaMetadata.putString(MediaMetadata.METADATA_KEY_TITLE, title);
-            mediaMetadata.putString(MediaMetadata.METADATA_KEY_ARTIST, artist);
-            mediaMetadata.putString(MediaMetadata.METADATA_KEY_ALBUM, album);
-            mediaMetadata.putLong(MediaMetadata.METADATA_KEY_DURATION, Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)));
-            mediaSession.setMetadata(mediaMetadata.build());
 
             mmr.release();
         }
     };
+    public boolean notificationSwitch = true;
 
     public static Bitmap drawableToBitmap(Drawable drawable) {
         Bitmap bitmap;
@@ -406,8 +412,10 @@ public final class MediaPlayerService extends IntentService
         }
 
         public final void setDataSource(String path) {
-            currentDataSource = path;
-            Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "preparing");
+            synchronized (MediaPlayerService.this) {
+                currentDataSource = path;
+            }
+//            Constants.MediaPlayerMethodChannel.invokeMethod("stateManager", "preparing");
             Thread prepareThread = new Thread(new SetDataSourceRunnable(path));
             prepareThread.setPriority(Thread.MIN_PRIORITY);
             prepareThread.start();
@@ -448,8 +456,16 @@ public final class MediaPlayerService extends IntentService
             MediaPlayerService.album = album;
             MediaPlayerService.artwork = artwork;
             Thread thread = new Thread(updateNotificationRunnable);
-            thread.setPriority(updateNotificationPriority);
+            thread.setPriority(Thread.MIN_PRIORITY + 1);
             thread.start();
+        }
+
+        public final void cancelNotification() {
+            notificationManager.cancel(MediaPlayerNotifyID);
+        }
+
+        public final void notificationSwitch(boolean value) {
+            notificationSwitch = value;
         }
     }
 
@@ -462,7 +478,7 @@ public final class MediaPlayerService extends IntentService
 
         @Override
         public void run() {
-            synchronized (this) {
+            synchronized (MediaPlayerService.this) {
                 if (playbackState.getState() != PlaybackStateCompatIdle && path == currentDataSource) {
                     mediaPlayer.reset();
                     updatePlaybackState(PlaybackStateCompatIdle, 0);
@@ -471,7 +487,7 @@ public final class MediaPlayerService extends IntentService
                 }
             }
 
-            synchronized (this) {
+            synchronized (MediaPlayerService.this) {
                 if (playbackState.getState() == PlaybackStateCompatIdle && path == currentDataSource) {
                     try {
                         mediaPlayer.setDataSource(currentDataSource);
@@ -484,7 +500,7 @@ public final class MediaPlayerService extends IntentService
                 }
             }
 
-            synchronized (this) {
+            synchronized (MediaPlayerService.this) {
                 if (playbackState.getState() == PlaybackStateCompatInit && path == currentDataSource) {
                     updatePlaybackState(PlaybackStateCompatPreparing, 0);
                     mediaPlayer.prepareAsync();
@@ -504,11 +520,16 @@ public final class MediaPlayerService extends IntentService
             if (mediaPlayer.isPlaying()) {
                 Constants.mainThreadHandler.post(onPlayRunnable);
                 updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
-                notificationManager.notify(MediaPlayerNotifyID, notificationActing);
+                if (notificationSwitch) {
+                    notificationManager.notify(MediaPlayerNotifyID, notificationActingBuilder.build());
+
+                }
             } else {
                 Constants.mainThreadHandler.post(onPauseRunnable);
                 updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
-                notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+                if (notificationSwitch) {
+                    notificationManager.notify(MediaPlayerNotifyID, notificationPendingBuilder.build());
+                }
             }
         }
 
@@ -519,7 +540,9 @@ public final class MediaPlayerService extends IntentService
         synchronized (this) {
             Constants.mainThreadHandler.post(onPauseRunnable);
             updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
-            notificationManager.notify(MediaPlayerNotifyID, notificationPending);
+            if (notificationSwitch) {
+                notificationManager.notify(MediaPlayerNotifyID, notificationPendingBuilder.build());
+            }
         }
     }
 
@@ -556,7 +579,7 @@ public final class MediaPlayerService extends IntentService
     }
 
     @Override
-    public final void onPrepared(MediaPlayer mediaPlayer) {
+    public synchronized  final void onPrepared(MediaPlayer mediaPlayer) {
         updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onPreparedListener",
@@ -581,7 +604,7 @@ public final class MediaPlayerService extends IntentService
     }
 
     @Override
-    public final void onCompletion(MediaPlayer mediaPlayer) {
+    public synchronized  final void onCompletion(MediaPlayer mediaPlayer) {
         updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, mediaPlayer.getCurrentPosition());
         Constants.MediaPlayerMethodChannel.invokeMethod(
                 "onCompletionListener",
@@ -605,7 +628,7 @@ public final class MediaPlayerService extends IntentService
     }
 
     @Override
-    public final boolean onError(MediaPlayer mediaPlayer, int what, int extra) {
+    public synchronized final boolean onError(MediaPlayer mediaPlayer, int what, int extra) {
         updatePlaybackState(PlaybackStateCompat.STATE_ERROR, 0);
         audioFocusRelease();
         Constants.MediaPlayerMethodChannel.invokeMethod(
@@ -631,7 +654,7 @@ public final class MediaPlayerService extends IntentService
     }
 
     @Override
-    public final void onSeekComplete(MediaPlayer mediaPlayer) {
+    public synchronized final void onSeekComplete(MediaPlayer mediaPlayer) {
         if (mediaPlayer.isPlaying()) {
             updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mediaPlayer.getCurrentPosition());
         } else {

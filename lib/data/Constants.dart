@@ -11,6 +11,7 @@ class Constants {
   static const String database = 'johngu';
   static const String libraryTable = 'library';
   static const String favouriteTable = 'favourite';
+  static const String cacheDatabase = 'johngu-cache';
   static const String cacheRemotePictureTable = 'cacheRemotePicture';
 
   static const int durationThreshold = 15 * 1000;
@@ -100,6 +101,8 @@ class Constants {
   static const String defaultMusicTitle = 'Music';
   static const String defaultMusicArtist = 'For this moment';
 
+  static const AppBarTitlePadding = const EdgeInsets.all(8.0);
+
   static const Duration defaultDuration = const Duration(milliseconds: 500);
   static const Duration defaultShortDuration =
       const Duration(milliseconds: 250);
@@ -146,6 +149,48 @@ class Constants {
             ],
           );
   };
+  static final Widget Function(
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) targetFadeInOutOptimizeFlightShuttleBuilder = (
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) {
+    final Hero toHero = toHeroContext.widget;
+    final Hero fromHero = fromHeroContext.widget;
+    return flightDirection == HeroFlightDirection.push
+        ? Stack(
+            children: <Widget>[
+              FadeTransition(
+                opacity: const AlwaysStoppedAnimation(1.0),
+                child: fromHero,
+              ),
+              FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeInCirc)),
+                child: toHero,
+              ),
+            ],
+          )
+        : Stack(
+            children: <Widget>[
+              FadeTransition(
+                opacity: const AlwaysStoppedAnimation(1.0),
+                child: toHero,
+              ),
+              FadeTransition(
+                  opacity:
+                      animation.drive(CurveTween(curve: Curves.easeInCirc)),
+                  child: fromHero),
+            ],
+          );
+  };
+
   static final Widget Function(
     BuildContext flightContext,
     Animation<double> animation,
@@ -306,28 +351,24 @@ class Constants {
   }
 
   static const double decorationOpacity = 0.5;
-  static const Widget emptyArtwork = const SizedBox.expand(
-    child: const FittedBox(
-      fit: BoxFit.contain,
-      child: const ScaleTransition(
-        scale: const AlwaysStoppedAnimation<double>(0.5),
-        child: const FadeTransition(
-          opacity: const AlwaysStoppedAnimation<double>(decorationOpacity),
-          child: const Icon(Icons.music_note),
-        ),
+  static const Widget emptyArtwork = const FittedBox(
+    fit: BoxFit.contain,
+    child: const ScaleTransition(
+      scale: const AlwaysStoppedAnimation<double>(0.5),
+      child: const FadeTransition(
+        opacity: const AlwaysStoppedAnimation<double>(decorationOpacity),
+        child: const Icon(Icons.music_note),
       ),
     ),
   );
 
-  static const Widget emptyPersonPicture = const SizedBox.expand(
-    child: const FittedBox(
-      fit: BoxFit.contain,
-      child: const ScaleTransition(
-        scale: const AlwaysStoppedAnimation<double>(0.5),
-        child: const FadeTransition(
-          opacity: const AlwaysStoppedAnimation<double>(decorationOpacity),
-          child: const Icon(Icons.person_pin),
-        ),
+  static const Widget emptyPersonPicture = const FittedBox(
+    fit: BoxFit.contain,
+    child: const ScaleTransition(
+      scale: const AlwaysStoppedAnimation<double>(0.5),
+      child: const FadeTransition(
+        opacity: const AlwaysStoppedAnimation<double>(decorationOpacity),
+        child: const Icon(Icons.person_pin),
       ),
     ),
   );
@@ -351,6 +392,21 @@ class Constants {
   static const double BarPreferHeight = 80;
   static const Size BarPreferSize =
       const Size(double.infinity, BarPreferHeight);
+
+  static const ListViewEndWidget = FadeTransition(
+      opacity: AlwaysStoppedAnimation(0.7),
+      child: Center(child: Icon(Icons.filter_list)));
+
+  static Widget expendLayoutBuilder(
+      Widget currentChild, List<Widget> previousChildren) {
+    List<Widget> children = previousChildren;
+    if (currentChild != null) children = children.toList()..add(currentChild);
+    return Stack(
+      alignment: Alignment.center,
+      fit: StackFit.expand,
+      children: children,
+    );
+  }
 }
 
 void systemSetup(BuildContext context) async {

@@ -1,16 +1,19 @@
 import 'dart:math';
 import 'dart:ui';
 
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:connectivity/connectivity.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_app/component/CustomValueNotifier.dart';
 import 'package:flutter_app/data/Database.dart' as database;
-import 'package:flutter_app/plugin/ExtendPlugin.dart';
 import 'package:flutter_app/plugin/MediaMetadataRetriever.dart';
+import 'package:flutter_app/ui/ExternalPage/Setting.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:path/path.dart' as path;
+import 'package:sqflite/sqflite.dart';
 
 import '../../component/AnimatedPopUpWidget.dart';
 import '../../component/CustomReorderableList.dart';
@@ -41,13 +44,18 @@ class _PlayListState extends State<PlayList>
     // Start Load PlayList
     final audioQuery = Variable.audioQuery;
     final List<SongInfo> allSongs = await audioQuery.getSongs();
+    Variable.filePathToNotifierMap[null] = CustomValueNotifier(false);
     List<String> allSongsPath = List();
     allSongs.forEach((SongInfo songInfo) {
       if (int.parse(songInfo.duration) > Variable.durationThreshold.value) {
         Variable.filePathToSongMap[songInfo.filePath] = songInfo;
+        Variable.filePathToNotifierMap[songInfo.filePath] =
+            CustomValueNotifier(false);
         allSongsPath.add(songInfo.filePath);
       }
     });
+    Variable.database = await openDatabase(
+        path.join(await getDatabasesPath(), '${Constants.database}.db'));
     Variable.library = await database.LinkedList.easeLinkedList<String>(
         database: Constants.database,
         table: Constants.libraryTable,
@@ -62,10 +70,19 @@ class _PlayListState extends State<PlayList>
 
     Variable.libraryNotify.value = Variable.library.list;
     Variable.favouriteNotify.value = Variable.favourite.list;
-    MediaPlayer.volume = 0.5;
+    Variable.playListRegisters[Variable.libraryNotify.value] =
+        PlayListRegister('Library', (int oldIndex, int newIndex) {
+      Variable.library.reorder(oldIndex, newIndex);
+      Variable.libraryNotify.notifyListeners();
+    });
+    Variable.playListRegisters[Variable.favouriteNotify.value] =
+        PlayListRegister('Favourite', (int oldIndex, int newIndex) {
+      Variable.favourite.reorder(oldIndex, newIndex);
+      Variable.favouriteNotify.notifyListeners();
+    });
 
-    Variable.cacheRemotePicture = await database.Table.easeTable(
-        database: Constants.database,
+    Variable.cacheRemotePicture = await database.ImageTable.easeTable(
+        database: Constants.cacheDatabase,
         table: Constants.cacheRemotePictureTable,
         primaryKey: Variable.cacheRemotePicturePrimaryKey,
         keys: Variable.cacheRemotePictureKeys,
@@ -73,42 +90,53 @@ class _PlayListState extends State<PlayList>
 
     MediaMetadataRetriever.getRemotePictureCallback.addListener(() {
       if (MediaMetadataRetriever.remotePictureData != null) {
+        /// update image
         Variable.filePathToImageMap[MediaMetadataRetriever.remotePicturePath]
             .value = MemoryImage(MediaMetadataRetriever.remotePictureData);
         Map<String, dynamic> map = Map();
+
+        /// store image
         map[Variable.cacheRemotePicturePrimaryKey.keyName] =
             MediaMetadataRetriever.remotePicturePath;
         map[Variable.cacheRemotePictureKeys[0].keyName] =
             MediaMetadataRetriever.remotePictureData;
         Variable.cacheRemotePicture.setData(map);
       }
+
+      /// updateNotification if in need
       if (MediaMetadataRetriever.remotePicturePath ==
           Variable.currentItem.value) {
-        final SongInfo songInfo =
+        SongInfo songInfo =
             Variable.filePathToSongMap[Variable.currentItem.value];
-        MediaPlayer.updateNotification(songInfo.title, songInfo.artist,
-            songInfo.album, MediaMetadataRetriever.remotePictureData);
+        MemoryImage image =
+            Variable.filePathToImageMap[songInfo.filePath].value;
+        MediaPlayer.updateNotification(
+            songInfo.title, songInfo.artist, songInfo.album, image?.bytes);
       }
     });
 
     /// network status check
     final connectivity = Connectivity();
-    final result = await connectivity.checkConnectivity();
-    if (result == ConnectivityResult.wifi) {
-      Variable.shouldGetRemotePicture = true;
-    } else {
-      Variable.shouldGetRemotePicture = false;
-    }
-    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
-      if (result == ConnectivityResult.wifi) {
-        Variable.shouldGetRemotePicture = true;
-      } else {
-        Variable.shouldGetRemotePicture = false;
+    Variable.networkStatue.value = await connectivity.checkConnectivity();
+    Connectivity().onConnectivityChanged.listen(
+        (ConnectivityResult result) => Variable.networkStatue.value = result);
+
+    Variable.networkStatue.addListener(() {
+      if (Variable.filePathToPendingRequestMap
+              .containsKey(Variable.currentItem.value) &&
+          Variable.filePathToPendingRequestMap[Variable.currentItem.value]) {
+        /// restart download remote image.
+        /// [Variable.getArtworkAsync] can check network state and decide whether get remote artwork.
+        Variable.getArtworkAsync(filePath: Variable.currentItem.value);
       }
     });
-
-    await Future.delayed(const Duration(milliseconds: 100));
-    Variable.panelAntiBlock.value = false;
+    MediaPlayer.volume = 0.5;
+    Future.delayed(Constants.defaultDuration, () {
+      if (Variable.currentItem.value == null &&
+          Variable.libraryNotify.value.length != 0)
+        Variable.setCurrentSong(
+            Variable.libraryNotify.value, Variable.libraryNotify.value.first);
+    });
   }
 
   List<Widget> _nestedAppBarBuilder(BuildContext context, _) {
@@ -119,9 +147,15 @@ class _PlayListState extends State<PlayList>
         elevation: 0.0,
         expandedHeight: 100,
         actions: <Widget>[
-          IconButton(
-            icon: Icon(Icons.trip_origin),
-            onPressed: () => _test(context),
+          Material(
+            color: Colors.transparent,
+            elevation: 0.0,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: IconButton(
+              icon: Icon(Icons.trip_origin),
+              onPressed: () => _test(context),
+            ),
           ),
         ],
         flexibleSpace: FlexibleSpaceBar(
@@ -130,8 +164,11 @@ class _PlayListState extends State<PlayList>
             children: <Widget>[
               //const Icon(Icons.brightness_1),
               const Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0)),
-              Text('Music', style: Theme.of(context).textTheme.title),
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0)),
+              Padding(
+                padding: Constants.AppBarTitlePadding,
+                child: Text('Music', style: Theme.of(context).textTheme.title),
+              ),
             ],
           ),
           background: Container(
@@ -182,7 +219,12 @@ class _PlayListState extends State<PlayList>
   }
 
   void _test(BuildContext context) {
-    ExtendPlugin.test();
+//    ExtendPlugin.AndroidChannel.invokeMethod('test',{'filePath':Variable.currentItem.value});
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Setting.pushPage(context, Offset(MediaQuery.of(context).size.width, 0.0));
+    }
   }
 
   @override
@@ -199,9 +241,9 @@ class _PlayListState extends State<PlayList>
   @override
   void dispose() {
     // TODO: implement dispose
-    super.dispose();
     WidgetsBinding.instance.removeObserver(this);
     Variable.tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -222,7 +264,6 @@ class _PlayListState extends State<PlayList>
     if (state == AppLifecycleState.resumed) {
       // user returned to our app
       systemSetup(context);
-      debugPrint('onResume');
     } else if (state == AppLifecycleState.inactive) {
       // app is inactive
     } else if (state == AppLifecycleState.paused) {
@@ -234,9 +275,9 @@ class _PlayListState extends State<PlayList>
 }
 
 class _SliverPersistentHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final TabBar _tabBar;
+  final TabBar tabBar;
 
-  _SliverPersistentHeaderDelegate(this._tabBar);
+  _SliverPersistentHeaderDelegate(this.tabBar);
 
   Widget _valueListenableBuilder(
       BuildContext context, bool isIgnore, Widget child) {
@@ -262,7 +303,7 @@ class _SliverPersistentHeaderDelegate extends SliverPersistentHeaderDelegate {
               child: SafeArea(
                 top: true,
                 bottom: false,
-                child: _tabBar,
+                child: tabBar,
               )),
         ),
       ),
@@ -270,15 +311,14 @@ class _SliverPersistentHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  double get maxExtent => _tabBar.preferredSize.height + 20;
+  double get maxExtent => tabBar.preferredSize.height + 20;
 
   @override
-  double get minExtent => _tabBar.preferredSize.height + 20;
+  double get minExtent => tabBar.preferredSize.height + 20;
 
   @override
-  bool shouldRebuild(SliverPersistentHeaderDelegate oldDelegate) {
-    return true;
-  }
+  bool shouldRebuild(_SliverPersistentHeaderDelegate oldDelegate) =>
+      oldDelegate.tabBar != this.tabBar;
 }
 
 class MainTabView extends StatelessWidget {
@@ -346,28 +386,11 @@ class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
       Variable.setCurrentSong(
           Variable.favouriteNotify.value, songInfo.filePath);
 
-  static Widget _itemBuilder(BuildContext context, SongInfo songInfo) {
-    return ListTile(
-      key: ValueKey(songInfo),
-      leading: SongTileArtwork(
+  static Widget _itemBuilder(SongInfo songInfo) => FavouriteListItem(
+        key: ValueKey(songInfo),
         songInfo: songInfo,
-      ),
-      title: AutoSizeText(
-        songInfo.title,
-        style: Theme.of(context).textTheme.body1,
-        maxLines: 1,
-      ),
-      subtitle: AutoSizeText(
-        songInfo.artist == '<unknown>' ? songInfo.album : songInfo.artist,
-        style: Theme.of(context).textTheme.body2,
-        maxLines: 1,
-      ),
-      onTap: () => _onItemTap(context, songInfo),
-      trailing: IconButton(
-          icon: const Icon(Icons.more_horiz),
-          onPressed: () => pushSongViewPage(context, songInfo)),
-    );
-  }
+        onTap: _onItemTap,
+      );
 
   _onReorder(int oldIndex, int newIndex) {
     Variable.favourite.reorder(oldIndex, newIndex);
@@ -390,13 +413,13 @@ class _FavoriteListBuilderState extends State<FavoriteListBuilder> {
               )
             : const Padding(
                 padding: const EdgeInsets.only(bottom: 120.0),
-                child: Center(child: Icon(Icons.filter_list)),
+                child: Constants.ListViewEndWidget,
               ),
         onDragStart: () async => Variable.panelAntiBlock.value = true,
         onDragEnd: () => Variable.panelAntiBlock.value = false,
         children: <Widget>[
           for (final String songPath in widget.list)
-            _itemBuilder(context, Variable.filePathToSongMap[songPath]),
+            _itemBuilder(Variable.filePathToSongMap[songPath]),
         ],
         onReorder: _onReorder,
       );
@@ -462,6 +485,58 @@ class FavouriteListHeader extends StatelessWidget {
   }
 }
 
+class FavouriteListItem extends StatelessWidget {
+  const FavouriteListItem({Key key, this.songInfo, this.onTap})
+      : super(key: key);
+  final SongInfo songInfo;
+  final Function(BuildContext, SongInfo) onTap;
+
+  Widget _builder(BuildContext context, value, Widget child) {
+    final color = value
+        ? Theme.of(context).primaryColor
+        : Theme.of(context).backgroundColor.withOpacity(0.0);
+    return AnimatedContainer(
+      duration: Constants.defaultDuration,
+      color: color,
+      child: ListTile(
+        leading: AnimatedContainer(
+          duration: Constants.defaultDuration,
+          foregroundDecoration: BoxDecoration(
+            color: value ? Colors.transparent : Colors.black38,
+            borderRadius: Constants.borderRadius,
+          ),
+          child: SongTileArtwork(filePath: songInfo.filePath),
+        ),
+        title: Text(
+          songInfo.title,
+          style: Theme.of(context).textTheme.body1,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          songInfo.artist == '<unknown>' ? songInfo.album : songInfo.artist,
+          style: Theme.of(context).textTheme.body2,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        onTap: () => onTap(context, songInfo),
+        trailing: SongInfoButton(
+          songInfo: songInfo,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return ValueListenableBuilder(
+      valueListenable: Variable.filePathToNotifierMap[songInfo.filePath],
+      builder: _builder,
+    );
+  }
+}
+
 class DefaultList extends StatelessWidget {
   const DefaultList({Key key}) : super(key: key);
 
@@ -491,25 +566,11 @@ class _DefaultListBuilderState extends State<DefaultListBuilder> {
   static void _onItemTap(BuildContext context, SongInfo songInfo) =>
       Variable.setCurrentSong(Variable.libraryNotify.value, songInfo.filePath);
 
-  static Widget _itemBuilder(BuildContext context, SongInfo songInfo) {
-    return ListTile(
-      key: ValueKey(songInfo),
-      title: AutoSizeText(
-        songInfo.title,
-        style: Theme.of(context).textTheme.body1,
-        maxLines: 1,
-      ),
-      subtitle: AutoSizeText(
-        songInfo.artist == '<unknown>' ? songInfo.album : songInfo.artist,
-        style: Theme.of(context).textTheme.body2,
-        maxLines: 1,
-      ),
-      onTap: () => _onItemTap(context, songInfo),
-      trailing: IconButton(
-          icon: const Icon(Icons.more_horiz),
-          onPressed: () => pushSongViewPage(context, songInfo)),
-    );
-  }
+  static Widget _itemBuilder(SongInfo songInfo) => DefaultListItem(
+        key: ValueKey(songInfo),
+        songInfo: songInfo,
+        onTap: _onItemTap,
+      );
 
   _onReorder(int oldIndex, int newIndex) {
     Variable.library.reorder(oldIndex, newIndex);
@@ -533,12 +594,12 @@ class _DefaultListBuilderState extends State<DefaultListBuilder> {
                 child: Center(child: FadeInWidget(child: Icon(Icons.search))))
             : const Padding(
                 padding: const EdgeInsets.only(bottom: 120.0),
-                child: Center(child: Icon(Icons.filter_list))),
+                child: Constants.ListViewEndWidget),
         onDragStart: () async => Variable.panelAntiBlock.value = true,
         onDragEnd: () => Variable.panelAntiBlock.value = false,
         children: <Widget>[
           for (final String songPath in widget.list)
-            _itemBuilder(context, Variable.filePathToSongMap[songPath]),
+            _itemBuilder(Variable.filePathToSongMap[songPath]),
         ],
         onReorder: _onReorder,
       );
@@ -609,6 +670,64 @@ class DefaultListHeader extends StatelessWidget {
   }
 }
 
+class DefaultListItem extends StatelessWidget {
+  const DefaultListItem({Key key, this.songInfo, this.onTap}) : super(key: key);
+  final SongInfo songInfo;
+  final Function onTap;
+
+  Widget _builder(BuildContext context, value, Widget child) {
+    final color = value
+        ? Theme.of(context).primaryColor
+        : Theme.of(context).backgroundColor.withOpacity(0.0);
+    return AnimatedContainer(
+        duration: Constants.defaultDuration, color: color, child: child);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return ValueListenableBuilder(
+      valueListenable: Variable.filePathToNotifierMap[songInfo.filePath],
+      builder: _builder,
+      child: ListTile(
+        title: Text(
+          songInfo.title,
+          style: Theme.of(context).textTheme.body1,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          songInfo.artist == '<unknown>' ? songInfo.album : songInfo.artist,
+          style: Theme.of(context).textTheme.body2,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        onTap: () => onTap(context, songInfo),
+        trailing: SongInfoButton(
+          songInfo: songInfo,
+        ),
+      ),
+    );
+  }
+}
+
+class SongInfoButton extends StatelessWidget {
+  const SongInfoButton({Key key, this.songInfo}) : super(key: key);
+  final SongInfo songInfo;
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return IconButton(
+        icon: const Icon(Icons.more_horiz),
+        onPressed: () {
+          RenderBox renderBox = context.findRenderObject();
+          return SongViewPage.pushPage(
+              context, songInfo, renderBox.localToGlobal(Offset.zero));
+        });
+  }
+}
+
 class AlbumList extends StatefulWidget {
   const AlbumList({Key key}) : super(key: key);
 
@@ -657,7 +776,6 @@ class _AlbumListState extends State<AlbumList> {
             child: Text('Error: ${snapshot.error}'),
           ));
         return CustomScrollView(
-          cacheExtent: 100,
           slivers: <Widget>[
             SliverAppBar(
               backgroundColor: Colors.transparent,
@@ -666,31 +784,28 @@ class _AlbumListState extends State<AlbumList> {
                 titlePadding: EdgeInsets.zero,
                 title: Padding(
                   padding: const EdgeInsets.all(12.0),
-                  child: FadeInWidget(
-                    child: Text(
-                      'Albums Gallery',
-                      style: Theme.of(context).textTheme.body1,
-                    ),
+                  child: Text(
+                    'Albums Gallery',
+                    style: Theme.of(context).textTheme.body1,
                   ),
                 ),
               ),
             ),
-            SliverGrid(
-              gridDelegate: Constants.gridDelegate,
-              delegate: SliverChildBuilderDelegate(
-                _albumItemBuilder,
-                childCount: Variable.albums.length,
-                addAutomaticKeepAlives: true,
-                addRepaintBoundaries: true,
+            AnimationLimiter(
+              child: SliverGrid(
+                gridDelegate: Constants.gridDelegate,
+                delegate: SliverChildBuilderDelegate(
+                  _albumItemBuilder,
+                  childCount: Variable.albums.length,
+                  addAutomaticKeepAlives: true,
+                  addRepaintBoundaries: false,
+                ),
               ),
             ),
             const SliverToBoxAdapter(
               child: const Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: const Center(
-                  child: const Icon(Icons.filter_list),
-                ),
-              ),
+                  padding: const EdgeInsets.all(12.0),
+                  child: Constants.ListViewEndWidget),
             ),
             const SliverToBoxAdapter(
               child: const Divider(
@@ -703,9 +818,19 @@ class _AlbumListState extends State<AlbumList> {
     return null;
   }
 
-  Widget _albumItemBuilder(BuildContext context, int index) {
-    return AlbumViewItem(
-      album: Variable.albums[index],
+  static Widget _albumItemBuilder(BuildContext context, int index) {
+    return AnimationConfiguration.staggeredGrid(
+      position: index,
+      columnCount: 2,
+      duration: const Duration(milliseconds: 375),
+      child: SlideAnimation(
+        verticalOffset: 50.0,
+        child: FadeInAnimation(
+          child: AlbumViewItem(
+            album: Variable.albums[index],
+          ),
+        ),
+      ),
     );
   }
 
@@ -760,14 +885,14 @@ class _ArtistListState extends State<ArtistList> {
       case ConnectionState.waiting:
         return const Center(child: const CircularProgressIndicator());
       case ConnectionState.done:
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(
               child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: Text('Error: ${snapshot.error}'),
           ));
+        }
         return CustomScrollView(
-          cacheExtent: 100,
           slivers: <Widget>[
             SliverAppBar(
               backgroundColor: Colors.transparent,
@@ -776,31 +901,28 @@ class _ArtistListState extends State<ArtistList> {
                 titlePadding: EdgeInsets.zero,
                 title: Padding(
                   padding: const EdgeInsets.all(12.0),
-                  child: FadeInWidget(
-                    child: Text(
-                      'Artists List',
-                      style: Theme.of(context).textTheme.body1,
-                    ),
+                  child: Text(
+                    'Artists List',
+                    style: Theme.of(context).textTheme.body1,
                   ),
                 ),
               ),
             ),
-            SliverGrid(
-              gridDelegate: Constants.gridDelegate,
-              delegate: SliverChildBuilderDelegate(
-                _artistItemBuilder,
-                childCount: Variable.artists.length,
-                addAutomaticKeepAlives: true,
-                addRepaintBoundaries: true,
+            AnimationLimiter(
+              child: SliverGrid(
+                gridDelegate: Constants.gridDelegate,
+                delegate: SliverChildBuilderDelegate(
+                  _artistItemBuilder,
+                  childCount: Variable.artists.length,
+                  addAutomaticKeepAlives: true,
+                  addRepaintBoundaries: false,
+                ),
               ),
             ),
             const SliverToBoxAdapter(
               child: const Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: const Center(
-                  child: const Icon(Icons.filter_list),
-                ),
-              ),
+                  padding: const EdgeInsets.all(12.0),
+                  child: Constants.ListViewEndWidget),
             ),
             const SliverToBoxAdapter(
               child: const Divider(
@@ -813,9 +935,19 @@ class _ArtistListState extends State<ArtistList> {
     return null;
   }
 
-  Widget _artistItemBuilder(BuildContext context, int index) {
-    return ArtistViewItem(
-      artist: Variable.artists[index],
+  static Widget _artistItemBuilder(BuildContext context, int index) {
+    return AnimationConfiguration.staggeredGrid(
+      position: index,
+      columnCount: 2,
+      duration: const Duration(milliseconds: 375),
+      child: SlideAnimation(
+        verticalOffset: 50.0,
+        child: FadeInAnimation(
+          child: ArtistViewItem(
+            artist: Variable.artists[index],
+          ),
+        ),
+      ),
     );
   }
 

@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_app/data/Constants.dart';
+import 'package:flutter_audio_query/flutter_audio_query.dart';
 
 import '../component/CustomValueNotifier.dart';
 
@@ -101,13 +103,27 @@ class MediaMetadataRetriever {
   ///  Results are [remotePicturePath] and [remotePictureData] but data will be sweeped when new data return from java!
   ///  [filePathToRemotePictureMap] will keep the data forever
   static void getRemotePicture(
-      String filePath, String artist, String title, String duration) {
+      {String filePath,
+      String artist,
+      String title,
+      String album,
+      SongInfo songInfo}) {
+    if (songInfo != null) {
+      filePath = songInfo.filePath;
+      artist = songInfo.artist;
+      title = songInfo.title;
+      album = songInfo.album;
+    }
+    if (artist?.length == 0 || artist == Constants.unknown) artist = null;
+    if (album?.length == 0 || album == Constants.unknown) album = null;
+    if (title?.length == 0 || title == Constants.unknown) title = null;
+
     filePathToPaletteMap[filePath] ??= CustomValueNotifier(null);
     MediaMetadataRetrieverChannel.invokeMethod('getRemotePicture', {
       'filePath': filePath,
       'artist': artist,
       'title': title,
-      'duration': duration,
+      'album': album,
     });
     filePathToPaletteRequiredMap[filePath] = true;
   }

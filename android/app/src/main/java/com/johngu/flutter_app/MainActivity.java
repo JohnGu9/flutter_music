@@ -15,6 +15,9 @@ import androidx.palette.graphics.Palette;
 
 import com.android.volley.toolbox.Volley;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Set;
 
@@ -27,6 +30,8 @@ public class MainActivity extends FlutterActivity {
     static Intent mediaPlayerServiceIntent;
     static MediaPlayerService.MediaPlayerServiceBinder mediaPlayerServiceBinder;
     static ServiceConnection mediaPlayerServiceConnection;
+
+    static final Bitmap.CompressFormat BitmapCompressFormat = Bitmap.CompressFormat.JPEG;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,6 +60,44 @@ public class MainActivity extends FlutterActivity {
                             result.success(null);
                             break;
 
+                        case "SaveByteAsJpeg":
+                            Thread thread = new Thread(new Runnable() {
+                                String filePath = methodCall.argument("filePath");
+                                byte[] bytes = methodCall.argument("bytes");
+
+                                @Override
+                                public void run() {
+                                    File file = new File(filePath);
+                                    if (file.exists()) {
+                                        file.delete();
+                                    }
+                                    Bitmap bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                                    try {
+                                        FileOutputStream out = new FileOutputStream(file);
+                                        bm.compress(BitmapCompressFormat, 100, out);
+                                        out.flush();
+                                        out.close();
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                    bm.recycle();
+                                    Log.d("Jpeg", filePath);
+                                }
+                            });
+                            thread.setPriority(Thread.MIN_PRIORITY);
+                            thread.start();
+                            result.success(null);
+                            break;
+
+                        case "ReadJpegAsByte":
+                            String filePath = methodCall.argument("filePath");
+                            Bitmap bitmap = BitmapFactory.decodeFile(filePath);
+                            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                            bitmap.compress(BitmapCompressFormat, 100, stream);
+                            result.success(stream.toByteArray());
+                            bitmap.recycle();
+                            break;
+
                         default:
                             result.notImplemented();
                     }
@@ -77,9 +120,9 @@ public class MainActivity extends FlutterActivity {
                             // Addition Function: Get Palette
                             // Get Palette (Full Async) run on background
 
-                            if (res != null) {
-                                Bitmap bitmap = BitmapFactory.decodeByteArray(res, 0, res.length);
-                                Thread thread = new Thread(() -> {
+                            Thread thread = new Thread(() -> {
+                                if (res != null) {
+                                    Bitmap bitmap = BitmapFactory.decodeByteArray(res, 0, res.length);
                                     Palette palette = new Palette.Builder(bitmap).generate();
                                     ArrayList list = new ArrayList<Object>() {{
                                         add(filePath);
@@ -93,10 +136,11 @@ public class MainActivity extends FlutterActivity {
                                     }};
                                     Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
                                     bitmap.recycle();
-                                });
-                                thread.setPriority(Thread.MIN_PRIORITY);
-                                thread.start();
-                            }
+                                }
+                            });
+                            thread.setPriority(Thread.MIN_PRIORITY);
+                            thread.start();
+
 
                             break;
 
@@ -112,21 +156,15 @@ public class MainActivity extends FlutterActivity {
                             break;
 
                         case "getRemotePicture":
-                            Thread thread = new Thread(new Runnable() {
+                            thread = new Thread(new Runnable() {
                                 // flutter have more accurate parser
                                 String artist = methodCall.argument("artist");
                                 String title = methodCall.argument("title");
-                                final String duration = methodCall.argument("duration");
+                                String album = methodCall.argument("album");
 
                                 @Override
                                 public void run() {
-                                    if (artist.equals(MediaPlayerService.unknown)) {
-                                        artist = null;
-                                    }
-                                    if (title.equals(MediaPlayerService.unknown)) {
-                                        title = null;
-                                    }
-                                    Set<String> ids = RemoteMediaMetadataRetriever.getMBID(artist, title, duration);
+                                    Set<String> ids = RemoteMediaMetadataRetriever.getMBID(artist, album, title);
                                     byte[] res = RemoteMediaMetadataRetriever.getArtwork(ids);
                                     final ArrayList<Object> result = new ArrayList<Object>() {{
                                         add(filePath);
@@ -164,28 +202,25 @@ public class MainActivity extends FlutterActivity {
 
                         case "getPalette":
                             byte[] artwork = methodCall.argument("artwork");
-                            Bitmap bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
-                            Thread thread0 = new Thread(new Runnable() {
+                            thread = new Thread(() -> {
+                                Bitmap bitmap = BitmapFactory.decodeByteArray(artwork, 0, artwork.length);
 
-                                @Override
-                                public void run() {
-                                    Palette palette = new Palette.Builder(bitmap).generate();
-                                    ArrayList list = new ArrayList<Object>() {{
-                                        add(filePath);
-                                        add(palette.getDominantSwatch() != null ? palette.getDominantSwatch().getRgb() : null);
-                                        add(palette.getVibrantSwatch() != null ? palette.getVibrantSwatch().getRgb() : null);
-                                        add(palette.getMutedSwatch() != null ? palette.getMutedSwatch().getRgb() : null);
-                                        add(palette.getLightVibrantSwatch() == null ? null : palette.getLightVibrantSwatch().getRgb());
-                                        add(palette.getLightMutedSwatch() == null ? null : palette.getLightMutedSwatch().getRgb());
-                                        add(palette.getDarkVibrantSwatch() == null ? null : palette.getDarkVibrantSwatch().getRgb());
-                                        add(palette.getDarkMutedSwatch() == null ? null : palette.getDarkMutedSwatch().getRgb());
-                                    }};
-                                    Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
-                                    bitmap.recycle();
-                                }
+                                Palette palette = new Palette.Builder(bitmap).generate();
+                                ArrayList list = new ArrayList<Object>() {{
+                                    add(filePath);
+                                    add(palette.getDominantSwatch() != null ? palette.getDominantSwatch().getRgb() : null);
+                                    add(palette.getVibrantSwatch() != null ? palette.getVibrantSwatch().getRgb() : null);
+                                    add(palette.getMutedSwatch() != null ? palette.getMutedSwatch().getRgb() : null);
+                                    add(palette.getLightVibrantSwatch() == null ? null : palette.getLightVibrantSwatch().getRgb());
+                                    add(palette.getLightMutedSwatch() == null ? null : palette.getLightMutedSwatch().getRgb());
+                                    add(palette.getDarkVibrantSwatch() == null ? null : palette.getDarkVibrantSwatch().getRgb());
+                                    add(palette.getDarkMutedSwatch() == null ? null : palette.getDarkMutedSwatch().getRgb());
+                                }};
+                                Constants.mainThreadHandler.post(() -> Constants.MediaMetadataRetrieverMethodChannel.invokeMethod("Palette", list));
+                                bitmap.recycle();
                             });
-                            thread0.setPriority(Thread.MIN_PRIORITY);
-                            thread0.start();
+                            thread.setPriority(Thread.MIN_PRIORITY);
+                            thread.start();
                             result.success(null);
                             break;
                         default:
@@ -280,6 +315,17 @@ public class MainActivity extends FlutterActivity {
 
                         case "updateNotification":
                             mediaPlayerServiceBinder.updateNotification(methodCall.argument("title"), methodCall.argument("artist"), methodCall.argument("album"), methodCall.argument("artwork"));
+                            result.success(null);
+                            break;
+
+                        case "cancelNotification":
+                            mediaPlayerServiceBinder.cancelNotification();
+                            result.success(null);
+                            break;
+
+                        case "notificationSwitch":
+                            mediaPlayerServiceBinder.notificationSwitch(methodCall.argument("value"));
+                            result.success(null);
                             break;
 
                         default:

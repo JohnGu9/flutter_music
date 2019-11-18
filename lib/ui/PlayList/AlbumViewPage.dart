@@ -3,35 +3,38 @@ import 'dart:ui';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_app/data/CustomImageProvider.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
-import '../../component/TransparentPageRoute.dart';
+
+import '../../component/CustomPageRoute.dart';
 import '../../data/Constants.dart';
 import '../../data/Variable.dart';
 import 'BasicViewPage.dart';
-
 import 'SongViewPage.dart';
 
-pushAlbumViewPage(BuildContext context, AlbumInfo albumInfo,
-    ImageProvider imageProvider) async {
-  await SchedulerBinding.instance.endOfFrame;
-  Future.microtask(
-    () => Navigator.push(
-      context,
-      TransparentRoute(
-        builder: (BuildContext context) => AlbumViewPage(
-          album: albumInfo,
-          image: imageProvider,
-        ),
-      ),
-    ),
-  );
-}
-
 class AlbumViewPage extends StatefulWidget {
-  const AlbumViewPage({Key key, @required this.album, this.image})
+  const AlbumViewPage(
+      {Key key, @required this.album, this.albumArtworkProvider})
       : super(key: key);
   final AlbumInfo album;
-  final ImageProvider image;
+  final AlbumArtworkProvider albumArtworkProvider;
+
+  /// This page feature certain transition animation
+  /// Push router action with fixed animation are integrated in [AlbumViewPage]
+  static pushPage(BuildContext context, AlbumInfo albumInfo) async {
+    await SchedulerBinding.instance.endOfFrame;
+    Future.microtask(
+      () => Navigator.push(
+        context,
+        CustomPageRoute(
+          builder: (BuildContext context) => AlbumViewPage(
+            album: albumInfo,
+            albumArtworkProvider: AlbumArtworkProvider(albumInfo.id),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   _AlbumViewPageState createState() => _AlbumViewPageState();
@@ -43,11 +46,11 @@ class _AlbumViewPageState extends State<AlbumViewPage> {
   Future _quit;
 
   Widget _listItemBuilder(BuildContext context, int index) {
-    if (index >= Variable.albumIdToSongsMap[widget.album.id].length) {
+    if (index >= Variable.albumIdToSongPathsMap[widget.album.id].value.length) {
       return null;
     }
     final String songInfo =
-        Variable.albumIdToSongsMap[widget.album.id][index];
+        Variable.albumIdToSongPathsMap[widget.album.id].value[index];
     return ListTile(
       title: AutoSizeText(
         Variable.filePathToSongMap[songInfo].title,
@@ -56,9 +59,10 @@ class _AlbumViewPageState extends State<AlbumViewPage> {
       ),
       trailing: IconButton(
           icon: Icon(Icons.more_horiz),
-          onPressed: () => pushSongViewPage(context, Variable.filePathToSongMap[songInfo])),
+          onPressed: () =>
+              pushSongViewPage(context, Variable.filePathToSongMap[songInfo])),
       onTap: () => Variable.setCurrentSong(
-          Variable.albumIdToSongsMap[widget.album.id], songInfo),
+          Variable.albumIdToSongPathsMap[widget.album.id].value, songInfo),
     );
   }
 
@@ -73,7 +77,25 @@ class _AlbumViewPageState extends State<AlbumViewPage> {
     }
   }
 
-  Widget built;
+  Widget _builder(BuildContext context, value, Widget child) {
+    return AnimatedSwitcher(
+      duration: Constants.defaultDuration,
+      layoutBuilder: Constants.expendLayoutBuilder,
+      child: FittedBox(
+        fit: BoxFit.fitWidth,
+        alignment: Alignment.topCenter,
+        child: (value == null)
+            ? Constants.emptyArtwork
+            : Image(
+              key: ValueKey(value),
+              height: 200,
+              width: 200,
+              image: value,
+              fit: BoxFit.cover,
+            ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -86,15 +108,14 @@ class _AlbumViewPageState extends State<AlbumViewPage> {
   @override
   void dispose() {
     // TODO: implement dispose
-    super.dispose();
     _scrollController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    built ??= builder(context);
-    return built;
+    return builder(context);
   }
 
   Widget builder(BuildContext context) {
@@ -106,50 +127,83 @@ class _AlbumViewPageState extends State<AlbumViewPage> {
           flightShuttleBuilder:
               Constants.targetAndSourceFadeInOutFlightShuttleBuilder,
           child: Material(
-            elevation: 0.0,
-            borderRadius: Constants.borderRadius,
-            color: Theme.of(context)
-                .backgroundColor
-                .withOpacity(Constants.panelOpacity),
-            child: CustomScrollView(
-              controller: _scrollController,
-              slivers: <Widget>[
-                SliverAppBar(
-                  pinned: true,
-                  elevation: 4.0,
-                  automaticallyImplyLeading: false,
-                  shape: const RoundedRectangleBorder(
-                      borderRadius: Constants.borderRadius),
-                  expandedHeight: MediaQuery.of(context).size.width / 1.15,
-                  backgroundColor: Theme.of(context).backgroundColor,
-                  flexibleSpace: FlexibleSpaceBar(
-                    centerTitle: true,
-                    title: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width/2),
-                      child: AutoSizeText(
-                        widget.album.title,
-                        style: Constants.textStyleWithShadow(
-                          Theme.of(context).textTheme.body1,
-                          Theme.of(context).brightness == Brightness.light
-                              ? Colors.white
-                              : Colors.black,
-                        ),
-                        maxLines: 1,
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: Constants.borderRadius,
+                color: Theme.of(context)
+                    .primaryColor
+                    .withOpacity(Constants.panelOpacity),
+              ),
+              foregroundDecoration: BoxDecoration(
+                  gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Theme.of(context).primaryColor.withOpacity(0.0),
+                  Theme.of(context).primaryColor.withOpacity(1.0),
+                ],
+                stops: const [0.9, 1.0],
+              )),
+              child: CustomScrollView(
+                controller: _scrollController,
+                slivers: <Widget>[
+                  SliverAppBar(
+                    pinned: true,
+                    elevation: 4.0,
+                    automaticallyImplyLeading: false,
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: Constants.borderRadius),
+                    expandedHeight: MediaQuery.of(context).size.width / 1.15,
+                    backgroundColor: Theme.of(context).backgroundColor,
+                    flexibleSpace: FlexibleSpaceBar(
+                      centerTitle: true,
+                      background: ValueListenableBuilder(
+                        valueListenable: widget.albumArtworkProvider,
+                        builder: _builder,
                       ),
                     ),
-                    background: (widget.image == null)
-                        ? Constants.emptyArtwork
-                        : Image(
-                            image: widget.image,
-                            fit: BoxFit.fitWidth,
-                            alignment: Alignment.topCenter,
-                          ),
                   ),
-                ),
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(_listItemBuilder),
-                )
-              ],
+                  SliverToBoxAdapter(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Theme.of(context).primaryColor,
+                            Theme.of(context).primaryColor.withOpacity(0.0)
+                          ],
+                          stops: const [0.0, 1.0],
+                        ),
+                      ),
+                      child: ListTile(
+                        leading: const Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: const Icon(Icons.album),
+                        ),
+                        title: SelectableText(
+                          widget.album.title,
+                          style: Theme.of(context).textTheme.body1,
+                        ),
+                        subtitle: SelectableText(
+                          widget.album.artist,
+                          style: Theme.of(context).textTheme.body2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(_listItemBuilder),
+                  ),
+                  const SliverToBoxAdapter(
+                    child: const Padding(
+                      padding: const EdgeInsets.only(bottom: 20.0),
+                      child: Constants.ListViewEndWidget,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -1,10 +1,12 @@
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_app/plugin/MediaMetadataRetriever.dart';
+import 'package:flutter_app/ui/PlayList/CurrentPlayList.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 
 import '../../component/AntiBlockingWidget.dart';
@@ -47,7 +49,7 @@ class Artwork extends StatefulWidget {
 class _ArtworkState extends State<Artwork> {
   ImageProvider image;
 
-  _loadImageAsync() async {
+  _updateImageAsync() async {
     image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
     await SchedulerBinding.instance.endOfFrame;
     if (mounted) {
@@ -62,65 +64,74 @@ class _ArtworkState extends State<Artwork> {
     // TODO: implement initState
     super.initState();
     if (widget.songInfo != null) {
-      Variable.getArtworkAsync(path: widget.songInfo.filePath);
+      Variable.getArtworkAsync(filePath: widget.songInfo.filePath);
       image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
       Variable.filePathToImageMap[widget.songInfo.filePath]
-          .addListener(_loadImageAsync);
+          .addListener(_updateImageAsync);
     }
   }
 
   @override
   void didUpdateWidget(Artwork oldWidget) {
     // TODO: implement didUpdateWidget
-    super.didUpdateWidget(oldWidget);
     if (widget.songInfo != oldWidget.songInfo) {
       Variable.filePathToImageMap[oldWidget.songInfo?.filePath]
-          ?.removeListener(_loadImageAsync);
+          ?.removeListener(_updateImageAsync);
       image = Variable.filePathToImageMap[widget.songInfo.filePath].value;
       Variable.filePathToImageMap[widget.songInfo.filePath]
-          .addListener(_loadImageAsync);
-      setState(() {});
+          .addListener(_updateImageAsync);
     }
+    super.didUpdateWidget(oldWidget);
   }
 
   @override
   void dispose() {
     // TODO: implement dispose
     Variable.filePathToImageMap[widget.songInfo?.filePath]
-        ?.removeListener(_loadImageAsync);
+        ?.removeListener(_updateImageAsync);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return Material(
-      elevation: 4,
-      color: Theme.of(context).primaryColor,
-      borderRadius: Constants.borderRadius,
-      clipBehavior: Clip.antiAlias,
-      child: image == null
-          ? InkWell(
+    return RepaintBoundary(
+      child: Material(
+        elevation: 4.0,
+        animationDuration: Duration.zero,
+        color: Theme.of(context).primaryColor,
+        borderRadius: Constants.borderRadius,
+        clipBehavior: Clip.hardEdge,
+        child: Stack(fit: StackFit.expand, children: [
+          AnimatedSwitcher(
+            duration: Constants.defaultDuration,
+            layoutBuilder: Constants.expendLayoutBuilder,
+            child: image == null
+                ? const FittedBox(
+                    fit: BoxFit.contain,
+                    child: const ScaleTransition(
+                      scale: const AlwaysStoppedAnimation<double>(0.5),
+                      child: const Icon(Icons.music_note),
+                    ),
+                  )
+                : Image(
+                    key: ValueKey(image),
+                    image: image,
+                    fit: BoxFit.cover,
+                    height: _kImageHeight,
+                    width: _kImageWidth,
+                  ),
+          ),
+          Material(
+            color: Colors.transparent,
+            animationDuration: Constants.defaultDuration,
+            child: InkWell(
               onTap: _onTap,
               onLongPress: () => Feedback.forLongPress(context),
-              child: const FittedBox(
-                fit: BoxFit.contain,
-                child: const ScaleTransition(
-                  scale: const AlwaysStoppedAnimation<double>(0.5),
-                  child: const Icon(Icons.music_note),
-                ),
-              ),
-            )
-          : Ink.image(
-              image: image,
-              fit: BoxFit.cover,
-              height: _kImageHeight,
-              width: _kImageWidth,
-              child: InkWell(
-                onTap: _onTap,
-                onLongPress: () => Feedback.forLongPress(context),
-              ),
             ),
+          )
+        ]),
+      ),
     );
   }
 }
@@ -135,7 +146,6 @@ class HeroTitle extends StatelessWidget {
     return Hero(
       tag: songInfo.hashCode.toString() + 'title',
       transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.optimizeFlightShuttleBuilder,
       child: FittedBox(
         fit: BoxFit.contain,
         child: Text(
@@ -158,7 +168,6 @@ class HeroArtist extends StatelessWidget {
     return Hero(
       tag: songInfo.hashCode.toString() + 'artist',
       transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.optimizeFlightShuttleBuilder,
       child: FittedBox(
         fit: BoxFit.contain,
         child: Text(
@@ -406,6 +415,75 @@ class MiniPanelPageViewItem extends StatelessWidget {
 
 class MiniPanelPageViewItemBackground extends StatelessWidget {
   const MiniPanelPageViewItemBackground({Key key}) : super(key: key);
+  static final Widget Function(
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) flightShuttleBuilder = (
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) {
+    final curve = CurveTween(curve: Curves.easeInCirc).animate(animation);
+
+    final List<Color> colors = MediaMetadataRetriever
+        .filePathToPaletteMap[Variable.currentItem?.value]?.value;
+    List<Color> colorsTween;
+    List<double> stops;
+    if (colors == null) {
+      colorsTween = [
+        Theme.of(fromHeroContext).backgroundColor,
+        Theme.of(fromHeroContext).primaryColor,
+      ];
+      stops = const [0.0, 1.0];
+    } else {
+      colorsTween = _ColorfulBackgroundState.genColors(fromHeroContext, colors);
+
+      stops = const [0.0, 0.2, 0.7, 1.0];
+    }
+    final targetColor = Theme.of(toHeroContext)
+        .primaryColor
+        .withOpacity(Constants.panelOpacity);
+
+    final elevationTween = Tween(begin: 4.0, end: 0.0);
+    final borderTween = Tween(
+        begin: Constants.borderRadius,
+        end: FullScreenPanelBackground.borderRadius);
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (BuildContext context, Widget child) {
+        return Material(
+          color: Colors.transparent,
+          animationDuration: Duration.zero,
+          elevation: elevationTween.evaluate(animation),
+          borderRadius: borderTween.evaluate(animation),
+          child: ClipRRect(
+            borderRadius: Constants.borderRadius,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+              child: Container(
+                decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          for (final tween in colorsTween)
+                            Color.alphaBlend(
+                                tween.withOpacity(curve.value), targetColor)
+                        ],
+                        stops: stops),
+                    borderRadius: borderTween.evaluate(animation)),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -414,22 +492,19 @@ class MiniPanelPageViewItemBackground extends StatelessWidget {
       tag: SongInfoInherited.of(context).songInfo.hashCode.toString() +
           'background',
       transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.targetFadeInOutFlightShuttleBuilder,
+      flightShuttleBuilder: flightShuttleBuilder,
       child: Material(
         color: Colors.transparent,
         elevation: 4.0,
         borderRadius: Constants.borderRadius,
-        child: SizedBox.expand(
-          child: ClipRRect(
-            borderRadius: Constants.borderRadius,
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-              child: Material(
-                elevation: 0.0,
-                color: Theme.of(context)
-                    .primaryColor
-                    .withOpacity(Constants.panelOpacity),
-              ),
+        child: ClipRRect(
+          borderRadius: Constants.borderRadius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+            child: Container(
+              color: Theme.of(context)
+                  .primaryColor
+                  .withOpacity(Constants.panelOpacity),
             ),
           ),
         ),
@@ -462,29 +537,21 @@ class MiniPanelPageViewItemContent extends StatelessWidget {
         Expanded(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const SizedBox(height: 20, width: 50),
+              const SizedBox(height: 30),
               const SizedBox(height: 20, child: const HeroTitle()),
-              const SizedBox(height: 15, child: const HeroArtist()),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: <Widget>[
-                  const SizedBox(
-                      width: 0.0, child: const HeroInvalidLeftText()),
-                  Hero(
-                      tag: SongInfoInherited.of(context)
-                              .songInfo
-                              .hashCode
-                              .toString() +
-                          'slider',
-                      transitionOnUserGestures: true,
-                      child: const Material(
-                          color: Colors.transparent,
-                          child: const SizedBox(height: 20, width: 50))),
-                  const SizedBox(
-                      width: 0.0, child: const HeroInvalidRightText()),
-                ],
+              const SizedBox(height: 17, child: const HeroArtist()),
+              Hero(
+                tag:
+                    SongInfoInherited.of(context).songInfo.hashCode.toString() +
+                        'slider',
+                transitionOnUserGestures: true,
+                child: const Material(
+                  color: Colors.transparent,
+                  child: const SizedBox(height: 30, width: 200),
+                ),
               ),
             ],
           ),
@@ -565,7 +632,7 @@ class _ForePanelState extends State<ForePanel>
     _startPoint = details.globalPosition;
   }
 
-  static const _minHide = _kHidePanelMiniHeight - _kHidePanelFullHeight;
+  static const _minHide = hidePanelMiniHeight - hidePanelFullHeight;
   static const _maxHide = 0;
   static const _midHide = (_minHide + _maxHide) / 2;
 
@@ -611,7 +678,7 @@ class _ForePanelState extends State<ForePanel>
     _controller.fling(velocity: velocity);
   }
 
-  Widget _builder(BuildContext context, Offset offset, Widget child) =>
+  static Widget _builder(BuildContext context, Offset offset, Widget child) =>
       Transform.translate(offset: offset, child: child);
 
   @override
@@ -661,7 +728,7 @@ class ForePanelContent extends StatelessWidget {
   Widget build(BuildContext context) {
     // TODO: implement build
     return SizedBox(
-      height: MediaQuery.of(context).size.height - _kHidePanelMiniHeight,
+      height: MediaQuery.of(context).size.height - hidePanelMiniHeight,
       child: Stack(
         fit: StackFit.expand,
         children: const <Widget>[
@@ -694,8 +761,8 @@ class ForePanelContent extends StatelessWidget {
   }
 }
 
-const double _kHidePanelFullHeight = 170;
-const double _kHidePanelMiniHeight = 60;
+const double hidePanelFullHeight = 170;
+const double hidePanelMiniHeight = 60;
 
 class HidePanel extends StatelessWidget {
   const HidePanel({Key key}) : super(key: key);
@@ -718,15 +785,15 @@ class HidePanel extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               // Add one stop for each color. Stops should increase from 0 to 1
-              stops: const [0.0, 0.3, 0.9],
+              stops: const [0.0, 0.2, 0.9],
               colors: const [
-                const Color.fromARGB(8, 0, 0, 0),
+                const Color.fromARGB(12, 0, 0, 0),
                 const Color.fromARGB(8, 0, 0, 0),
                 Colors.transparent,
               ],
             )),
             child: const SizedBox(
-              height: _kHidePanelFullHeight,
+              height: hidePanelFullHeight,
               child: const HidePanelContent(),
             ),
           ),
@@ -755,12 +822,11 @@ class HidePanelContent extends StatelessWidget {
 class HidePanelBasicContent extends StatelessWidget {
   const HidePanelBasicContent({Key key}) : super(key: key);
 
-  Widget _builder(BuildContext context, String songPath, Widget child) {
-    return SongInfoInherited(
-      songInfo: Variable.filePathToSongMap[songPath],
-      child: child,
-    );
-  }
+  static Widget _builder(BuildContext context, String filePath, Widget child) =>
+      SongInfoInherited(
+        songInfo: Variable.filePathToSongMap[filePath],
+        child: child,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -769,12 +835,14 @@ class HidePanelBasicContent extends StatelessWidget {
       valueListenable: Variable.currentItem,
       builder: _builder,
       child: SizedBox(
-        height: _kHidePanelMiniHeight,
+        height: hidePanelMiniHeight,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: <Widget>[
+          children: const <Widget>[
             const SizedBox(width: 50, child: const RepeatButton()),
+            const SizedBox(width: 50, child: const ShareButton()),
             const SizedBox(width: 50, child: const FavoriteButton()),
+            const SizedBox(width: 50, child: const ListMenuButton()),
           ],
         ),
       ),
@@ -789,12 +857,12 @@ class HidePanelExtendContent extends StatelessWidget {
   Widget build(BuildContext context) {
     // TODO: implement build
     return SizedBox(
-      height: _kHidePanelFullHeight - _kHidePanelMiniHeight,
+      height: hidePanelFullHeight - hidePanelMiniHeight,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Expanded(
-            child: const Align(
+          const Expanded(
+            child: Align(
               alignment: Alignment.topCenter,
               child: Icon(Icons.expand_more),
             ),
@@ -861,16 +929,58 @@ class _FullScreenPanelBackgroundState extends State<FullScreenPanelBackground> {
 
   static final invalidPalette = CustomValueNotifier<List<Color>>(null);
 
+  static final Widget Function(
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) flightShuttleBuilder = (
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) {
+    final curve = CurveTween(curve: Curves.linearToEaseOut).animate(animation);
+    final elevationTween = Tween(begin: 4.0, end: 0.0);
+    final borderTween = Tween(
+        begin: Constants.borderRadius,
+        end: FullScreenPanelBackground.borderRadius);
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        AnimatedBuilder(
+          animation: animation,
+          builder: (BuildContext context, Widget child) {
+            return Material(
+              elevation: elevationTween.evaluate(animation),
+              animationDuration: Duration.zero,
+              color: Theme.of(context)
+                  .primaryColor
+                  .withOpacity(Constants.panelOpacity),
+              borderRadius: borderTween.evaluate(animation),
+            );
+          },
+        ),
+        FadeTransition(
+          opacity: curve,
+          child: toHeroContext.widget,
+        ),
+      ],
+    );
+  };
+
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
     return Hero(
       tag: songInfo.hashCode.toString() + 'background',
       transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.targetFadeInOutFlightShuttleBuilder,
+      flightShuttleBuilder: flightShuttleBuilder,
       child: RepaintBoundary(
         child: Material(
-          elevation: 4.0,
+          elevation: 0.0,
           color: Theme.of(context).backgroundColor,
           clipBehavior: Clip.antiAlias,
           borderRadius: FullScreenPanelBackground.borderRadius,
@@ -910,7 +1020,6 @@ class _ColorfulBackgroundState extends State<ColorfulBackground> {
       oldWidget.colorsListenable.removeListener(_valueChanged);
       value = widget.colorsListenable.value;
       widget.colorsListenable.addListener(_valueChanged);
-      setState(() {});
     }
     super.didUpdateWidget(oldWidget);
   }
@@ -1092,8 +1201,7 @@ class FullScreenPanelArtworkPageView extends StatelessWidget {
     // TODO: implement build
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.width * 1.1,
-      ),
+          maxHeight: MediaQuery.of(context).size.width * 1.1, minHeight: 0.0),
       child: const ArtworkPageViewForFullScreenPanel(),
     );
   }
@@ -1231,7 +1339,6 @@ class _ArtworkPageViewForFullScreenPanelState
                 physics: const BouncingScrollPhysics(),
                 itemBuilder: _pageViewItemBuilder,
                 itemCount: list.length,
-                cacheExtent: 1.0,
               );
       },
     );
@@ -1253,6 +1360,7 @@ class _ArtworkPageViewForFullScreenPanelState
 class FullScreenPanelPageViewItem extends StatefulWidget {
   const FullScreenPanelPageViewItem({Key key, this.songInfo}) : super(key: key);
   final SongInfo songInfo;
+  static const edgePadding = 8.0;
 
   @override
   _FullScreenPanelPageViewItemState createState() =>
@@ -1261,7 +1369,6 @@ class FullScreenPanelPageViewItem extends StatefulWidget {
 
 class _FullScreenPanelPageViewItemState
     extends State<FullScreenPanelPageViewItem> {
-  static const edgePadding = 8.0;
   static final Animation _animation =
       Tween(begin: 0.9, end: 1.0).animate(Variable.playButtonController);
 
@@ -1269,14 +1376,16 @@ class _FullScreenPanelPageViewItemState
   Widget build(BuildContext context) {
     // TODO: implement build
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: edgePadding),
+      padding: const EdgeInsets.symmetric(
+          horizontal: FullScreenPanelPageViewItem.edgePadding),
       child: SongInfoInherited(
         songInfo: widget.songInfo,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Padding(
-              padding: const EdgeInsets.all(edgePadding),
+              padding:
+                  const EdgeInsets.all(FullScreenPanelPageViewItem.edgePadding),
               child: ScaleTransition(
                 scale: _animation,
                 child: AspectRatio(
@@ -1286,11 +1395,13 @@ class _FullScreenPanelPageViewItemState
               ),
             ),
             const Padding(
-              padding: const EdgeInsets.symmetric(horizontal: edgePadding),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: FullScreenPanelPageViewItem.edgePadding),
               child: const SizedBox(height: 30, child: const HeroTitle()),
             ),
             const Padding(
-              padding: const EdgeInsets.symmetric(horizontal: edgePadding),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: FullScreenPanelPageViewItem.edgePadding),
               child: const SizedBox(height: 20, child: const HeroArtist()),
             ),
           ],
@@ -1308,7 +1419,7 @@ class FullScreenControllerPanel extends StatelessWidget {
     // TODO: implement build
     return const Expanded(
       child: const Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0),
         child: const Material(
           elevation: 0.0,
           color: Colors.transparent,
@@ -1322,52 +1433,54 @@ class FullScreenControllerPanel extends StatelessWidget {
 class FullScreenPanelControllerLayout extends StatelessWidget {
   const FullScreenPanelControllerLayout({Key key}) : super(key: key);
 
+  static Widget _builder(BuildContext context, String songPath, Widget child) {
+    return SongInfoInherited(
+      songInfo: Variable.filePathToSongMap[songPath],
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: <Widget>[
+          Hero(
+            tag: Variable.filePathToSongMap[songPath].hashCode.toString() +
+                'slider',
+            flightShuttleBuilder: Constants.targetPriorityFlightShuttleBuilder,
+            transitionOnUserGestures: true,
+            child: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                height: 35,
+                child: Row(
+                  children: const <Widget>[
+                    const LeftTimeText(),
+                    const Expanded(child: const AnimatedProgressSlider()),
+                    const RightTimeText(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 100,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: <Widget>[
+                const SizedBox(width: 70, child: const SkipPreviousButton()),
+                const SizedBox(width: 100, child: const HeroPlayButton()),
+                const SizedBox(width: 70, child: const SkipNextButton()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
     return ValueListenableBuilder(
       valueListenable: Variable.currentItem,
-      builder: (BuildContext context, String songPath, Widget child) {
-        return SongInfoInherited(
-          songInfo: Variable.filePathToSongMap[songPath],
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: <Widget>[
-              SizedBox(
-                height: 30,
-                child: Row(
-                  children: const <Widget>[
-                    const VerticalDivider(),
-                    const HeroLeftText(),
-                    const Expanded(child: const AnimatedProgressSlider()),
-                    const HeroRightText(),
-                    const VerticalDivider(),
-                  ],
-                ),
-              ),
-              SizedBox(
-                height: 100,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: <Widget>[
-                    const VerticalDivider(
-                      width: 5,
-                    ),
-                    const SizedBox(
-                        width: 70, child: const SkipPreviousButton()),
-                    const SizedBox(width: 100, child: const HeroPlayButton()),
-                    const SizedBox(width: 70, child: const SkipNextButton()),
-                    const VerticalDivider(
-                      width: 5,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+      builder: _builder,
     );
   }
 }
@@ -1388,41 +1501,15 @@ class SongInfoInherited extends InheritedWidget {
       oldWidget.songInfo != this.songInfo;
 }
 
-class HeroInvalidLeftText extends StatelessWidget {
-  const HeroInvalidLeftText({Key key}) : super(key: key);
+class LeftTimeText extends StatelessWidget {
+  const LeftTimeText({Key key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return Hero(
-      tag: SongInfoInherited.of(context).songInfo.hashCode.toString() + 'left',
-      transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.targetPriorityFlightShuttleBuilder,
-      child: const Material(),
-    );
-  }
-}
-
-class HeroLeftText extends StatelessWidget {
-  const HeroLeftText({Key key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    // TODO: implement build
-    return Hero(
-      tag: SongInfoInherited.of(context).songInfo.hashCode.toString() + 'left',
-      transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.targetPriorityFlightShuttleBuilder,
-      child: const RepaintBoundary(
-        child: const FittedBox(
-          fit: BoxFit.contain,
-          child: const Material(
-            elevation: 0.0,
-            color: Colors.transparent,
-            child: const LeftText(),
-          ),
-        ),
-      ),
+    return const FittedBox(
+      fit: BoxFit.contain,
+      child: const LeftText(),
     );
   }
 }
@@ -1437,54 +1524,26 @@ class LeftText extends StatelessWidget {
       valueListenable: MediaPlayer.currentPositionNotifier,
       builder: (BuildContext context, int position, Widget child) {
         int mtTime = position ~/ 1000;
-        return RepaintBoundary(
-          child: Text(
-            (mtTime ~/ 60).toString().padLeft(2, '0') +
-                ':' +
-                (mtTime % 60).toString().padLeft(2, '0'),
-            style: Theme.of(context).textTheme.body2,
-          ),
+        return Text(
+          (mtTime ~/ 60).toString().padLeft(2, '0') +
+              ':' +
+              (mtTime % 60).toString().padLeft(2, '0'),
+          style: Theme.of(context).textTheme.body2,
         );
       },
     );
   }
 }
 
-class HeroInvalidRightText extends StatelessWidget {
-  const HeroInvalidRightText({Key key}) : super(key: key);
+class RightTimeText extends StatelessWidget {
+  const RightTimeText({Key key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return Hero(
-      tag: SongInfoInherited.of(context).songInfo.hashCode.toString() + 'right',
-      transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.targetPriorityFlightShuttleBuilder,
-      child: const Material(),
-    );
-  }
-}
-
-class HeroRightText extends StatelessWidget {
-  const HeroRightText({Key key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    // TODO: implement build
-    return Hero(
-      tag: SongInfoInherited.of(context).songInfo.hashCode.toString() + 'right',
-      transitionOnUserGestures: true,
-      flightShuttleBuilder: Constants.targetPriorityFlightShuttleBuilder,
-      child: const RepaintBoundary(
-        child: const FittedBox(
-          fit: BoxFit.contain,
-          child: const Material(
-            elevation: 0.0,
-            color: Colors.transparent,
-            child: const RightText(),
-          ),
-        ),
-      ),
+    return const FittedBox(
+      fit: BoxFit.contain,
+      child: const RightText(),
     );
   }
 }
@@ -1516,19 +1575,21 @@ class RepeatButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return const Material(
-      elevation: 0.0,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: const InkWell(
-        onTap: onRepeat,
-        child: const Padding(
-          padding: const EdgeInsets.all(15),
-          child: const SizedBox.expand(
-            child: const FittedBox(
-              fit: BoxFit.contain,
-              child: const RepeatButtonIcon(),
+    return const RepaintBoundary(
+      child: const Material(
+        elevation: 0.0,
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: const InkWell(
+          onTap: onRepeat,
+          child: const Padding(
+            padding: const EdgeInsets.all(15),
+            child: const SizedBox.expand(
+              child: const FittedBox(
+                fit: BoxFit.contain,
+                child: const RepeatButtonIcon(),
+              ),
             ),
           ),
         ),
@@ -1540,7 +1601,7 @@ class RepeatButton extends StatelessWidget {
 class RepeatButtonIcon extends StatelessWidget {
   const RepeatButtonIcon({Key key}) : super(key: key);
 
-  Widget getIcon(PlayListSequenceStatus state) {
+  static Widget getIcon(PlayListSequenceStatus state) {
     switch (state) {
       case PlayListSequenceStatus.repeat:
         return const Icon(
@@ -1562,7 +1623,7 @@ class RepeatButtonIcon extends StatelessWidget {
     }
   }
 
-  Widget _valueListenableBuilder(
+  static Widget _valueListenableBuilder(
           BuildContext context, int state, Widget child) =>
       AnimatedSwitcher(
         duration: Constants.defaultDuration,
@@ -1624,48 +1685,21 @@ class HeroPlayButton extends StatelessWidget {
     return Hero(
       tag: SongInfoInherited.of(context).songInfo.hashCode.toString() + 'play',
       transitionOnUserGestures: true,
-      child: const Material(
-        elevation: 0.0,
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: const InkWell(
-          onTap: MediaPlayer.onPlayAndPause,
-          child: const Padding(
-            padding: const EdgeInsets.all(20),
-            child: const SizedBox.expand(
-              child: const FittedBox(
-                fit: BoxFit.contain,
-                child: const PlayButtonIcon(),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class PlayButton extends StatelessWidget {
-  const PlayButton({Key key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    // TODO: implement build
-    return const RepaintBoundary(
-      child: const Material(
-        elevation: 0.0,
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: const InkWell(
-          onTap: MediaPlayer.onPlayAndPause,
-          child: const Padding(
-            padding: const EdgeInsets.all(20),
-            child: const SizedBox.expand(
-              child: const FittedBox(
-                fit: BoxFit.contain,
-                child: const PlayButtonIcon(),
+      child: RepaintBoundary(
+        child: Material(
+          elevation: 0.0,
+          color: Colors.transparent,
+          shape: CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: MediaPlayer.onPlayAndPause,
+            child: const Padding(
+              padding: const EdgeInsets.all(20),
+              child: const SizedBox.expand(
+                child: const FittedBox(
+                  fit: BoxFit.contain,
+                  child: const PlayButtonIcon(),
+                ),
               ),
             ),
           ),
@@ -1728,12 +1762,14 @@ class FavoriteButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return const Material(
-      elevation: 0.0,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      clipBehavior: Clip.hardEdge,
-      child: const FavoriteButtonBody(),
+    return const RepaintBoundary(
+      child: const Material(
+        elevation: 0.0,
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.hardEdge,
+        child: const FavoriteButtonBody(),
+      ),
     );
   }
 }
@@ -1741,20 +1777,34 @@ class FavoriteButton extends StatelessWidget {
 class FavoriteButtonBody extends StatelessWidget {
   const FavoriteButtonBody({Key key}) : super(key: key);
 
+  Widget _animationBuilder(Widget child, Animation<double> animation) {
+    return ScaleTransition(
+        scale: animation,
+        child: FadeTransition(
+          opacity: animation,
+          child: child,
+        ));
+  }
+
   Widget _valueListenableBuilder(
       BuildContext context, List list, Widget child) {
     if (list == null) {
       return AnimatedSwitcher(
-          key: ValueKey(SongInfoInherited.of(context)?.songInfo),
           duration: Constants.defaultDuration,
-          child: const Icon(Icons.favorite_border, key: ValueKey(false)));
+          transitionBuilder: _animationBuilder,
+          child: Icon(Icons.favorite_border, key: ValueKey(false)));
     }
+    final bool contains = list.contains(Variable.currentItem.value);
+    final key = ValueKey(contains
+        ? SongInfoInherited.of(context).songInfo.hashCode + 1
+        : SongInfoInherited.of(context).songInfo.hashCode);
     return AnimatedSwitcher(
-      key: ValueKey(SongInfoInherited.of(context)?.songInfo),
       duration: Constants.defaultDuration,
-      child: list.contains(Variable.currentItem.value)
-          ? const Icon(Icons.favorite, key: ValueKey(true))
-          : const Icon(Icons.favorite_border, key: ValueKey(false)),
+      switchInCurve: Curves.fastOutSlowIn,
+      transitionBuilder: _animationBuilder,
+      child: contains
+          ? Icon(Icons.favorite, key: key)
+          : Icon(Icons.favorite_border, key: key),
     );
   }
 
@@ -1774,6 +1824,87 @@ class FavoriteButtonBody extends StatelessWidget {
               valueListenable: Variable.favouriteNotify,
               builder: _valueListenableBuilder,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ShareButton extends StatelessWidget {
+  const ShareButton({Key key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return const Material(
+      elevation: 0.0,
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.hardEdge,
+      child: const ShareButtonIcon(),
+    );
+  }
+}
+
+class ShareButtonIcon extends StatelessWidget {
+  const ShareButtonIcon({Key key}) : super(key: key);
+
+  static _onTap() {
+    if (Variable.currentItem.value == null) {
+      return;
+    }
+    Variable.shareSong(Variable.filePathToSongMap[Variable.currentItem.value]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return const InkWell(
+      onTap: _onTap,
+      child: const Padding(
+        padding: const EdgeInsets.all(15),
+        child: const SizedBox.expand(
+          child: const FittedBox(
+            fit: BoxFit.contain,
+            child: const Icon(Icons.share),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ListMenuButton extends StatelessWidget {
+  const ListMenuButton({Key key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return const Material(
+      elevation: 0.0,
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.hardEdge,
+      child: const ListMenuButtonIcon(),
+    );
+  }
+}
+
+class ListMenuButtonIcon extends StatelessWidget {
+  const ListMenuButtonIcon({Key key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return InkWell(
+      onTap: () => CurrentPlayList.pushPage(context),
+      child: const Padding(
+        padding: const EdgeInsets.all(15),
+        child: const SizedBox.expand(
+          child: const FittedBox(
+            fit: BoxFit.contain,
+            child: const Icon(Icons.queue_music),
           ),
         ),
       ),
@@ -1859,21 +1990,8 @@ class AnimatedProgressSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
-    return IgnorePointer(
-      ignoring: SongInfoInherited.of(context).songInfo == null,
-      child: Hero(
-        tag: SongInfoInherited.of(context).songInfo.hashCode.toString() +
-            'slider',
-        flightShuttleBuilder: Constants.targetPriorityFlightShuttleBuilder,
-        transitionOnUserGestures: true,
-        child: const RepaintBoundary(
-          child: const Material(
-            elevation: 0.0,
-            color: Colors.transparent,
-            child: const ProgressSlider(),
-          ),
-        ),
-      ),
+    return const RepaintBoundary(
+      child: const ProgressSlider(),
     );
   }
 }

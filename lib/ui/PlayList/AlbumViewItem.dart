@@ -1,8 +1,7 @@
 import 'dart:math';
 
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+import 'package:flutter_app/data/CustomImageProvider.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 
 import '../../data/Constants.dart';
@@ -11,32 +10,18 @@ import 'AlbumViewPage.dart';
 
 const currentPage = 1;
 
-class AlbumViewItem extends StatefulWidget {
-  AlbumViewItem({Key key, @required this.album}) : super(key: key);
+// ignore: must_be_immutable
+class AlbumViewItem extends StatelessWidget {
+  AlbumViewItem({Key key, @required this.album})
+      : albumArtworkProvider = AlbumArtworkProvider(album.id),
+        super(key: key);
+
   final AlbumInfo album;
-
-  @override
-  _AlbumViewItemState createState() => _AlbumViewItemState();
-}
-
-class _AlbumViewItemState extends State<AlbumViewItem> {
-  String tag;
-  ImageProvider _image;
-  bool _loaded = false;
-
-  _loadImages() async {
-    await SchedulerBinding.instance.endOfFrame;
-    _image = await Variable.getImageFromAlbums(widget.album);
-    await SchedulerBinding.instance.endOfFrame;
-    _loaded = true;
-    if (mounted) {
-      setState(() {});
-    }
-  }
+  AlbumArtworkProvider albumArtworkProvider;
 
   static const _innerScrollDuration = Duration(milliseconds: 335);
 
-  _onTap() async {
+  _onTap(BuildContext context) async {
     if (Variable.innerScrollController != null) {
       RenderBox renderBox = context.findRenderObject();
       Offset position = renderBox.localToGlobal(Offset.zero);
@@ -63,52 +48,50 @@ class _AlbumViewItemState extends State<AlbumViewItem> {
             curve: Curves.fastOutSlowIn);
       }
     }
-    pushAlbumViewPage(context, widget.album, _image);
+    AlbumViewPage.pushPage(context, album);
   }
 
-  @override
-  void initState() {
-    // TODO: implement initState
-    super.initState();
-    tag = widget.album.hashCode.toString() + 'album';
-    _loadImages();
+  static Widget _builder(
+      BuildContext context, ImageProvider value, Widget child) {
+    return AnimatedSwitcher(
+      duration: Constants.defaultDuration,
+      layoutBuilder: Constants.expendLayoutBuilder,
+      child: value == null
+          ? Constants.emptyArtwork
+          : Image(
+              key: ValueKey(value),
+              image: value,
+              fit: BoxFit.cover,
+            ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
     return Hero(
-      tag: tag,
+      tag: album.hashCode.toString() + 'album',
       child: Card(
         clipBehavior: Clip.hardEdge,
-        shape: const RoundedRectangleBorder(
-          borderRadius: Constants.borderRadius,
-        ),
+        shape:
+            const RoundedRectangleBorder(borderRadius: Constants.borderRadius),
         color: Theme.of(context).primaryColor,
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
             Align(
               alignment: Alignment.topCenter,
-              child: (Variable.albumIdToSongsMap[widget.album.id] == null ||
-                      !_loaded)
-                  ? const AnimatedSwitcher(
-                      duration: Constants.defaultDuration,
-                      child: const SizedBox(),
-                    )
-                  : AnimatedSwitcher(
-                      duration: Constants.defaultDuration,
-                      child: _image == null
-                          ? Constants.emptyArtwork
-                          : Image(
-                              image: _image,
-                              fit: BoxFit.cover,
-                            ),
-                    ),
+              child: AspectRatio(
+                aspectRatio: 1.0,
+                child: ValueListenableBuilder(
+                  valueListenable: albumArtworkProvider,
+                  builder: _builder,
+                ),
+              ),
             ),
             ForegroundView(
-              album: widget.album,
-              onTap: _onTap,
+              album: album,
+              onTap: () => _onTap(context),
             ),
           ],
         ),
@@ -132,40 +115,40 @@ class ForegroundView extends StatelessWidget {
         onTap: onTap,
         onLongPress: () => Feedback.forLongPress(context),
         child: Align(
-          alignment: Alignment.bottomCenter,
-          child: AspectRatio(
-            aspectRatio: 1 / (Constants.gridDelegateHeight - 1),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                child: FadeTransition(
-                  opacity: const AlwaysStoppedAnimation<double>(
-                      Constants.textOpacity),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        flex: 10,
-                        child: AutoSizeText(
-                          album.title,
-                          style: Theme.of(context).textTheme.title,
-                          maxLines: 1,
-                        ),
-                      ),
-                      Expanded(
-                        flex: 9,
-                        child: AutoSizeText(
-                          album.artist,
-                          style: Theme.of(context).textTheme.body1,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ],
-                  ),
+          alignment: Alignment.bottomLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  album.title,
+                  style: TextStyle(
+                      inherit: true,
+                      fontSize: 17,
+                      color: Theme.of(context)
+                          .textTheme
+                          .body1
+                          .color
+                          .withOpacity(0.9)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
+                Text(
+                  album.artist,
+                  style: TextStyle(
+                      inherit: true,
+                      fontSize: 15,
+                      color: Theme.of(context)
+                          .textTheme
+                          .body1
+                          .color
+                          .withOpacity(0.6)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ),

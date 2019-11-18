@@ -2,74 +2,26 @@ import 'dart:math';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+import 'package:flutter_app/data/CustomImageProvider.dart';
 import 'package:flutter_audio_query/flutter_audio_query.dart';
+
 import '../../data/Constants.dart';
 import '../../data/Variable.dart';
 import 'ArtistViewPage.dart';
 
 const currentPage = 0;
 
-class ArtistViewItem extends StatefulWidget {
-  const ArtistViewItem({Key key, this.artist}) : super(key: key);
+// ignore: must_be_immutable
+class ArtistViewItem extends StatelessWidget {
+  ArtistViewItem({Key key, this.artist})
+      : artistArtworkProvider = ArtistArtworkProvider(artist.id),
+        super(key: key);
   final ArtistInfo artist;
-
-  @override
-  _ArtistViewItemState createState() => _ArtistViewItemState();
-}
-
-class _ArtistViewItemState extends State<ArtistViewItem> {
-  List<ImageProvider> _images;
-  bool _loaded = false;
-  String heroTag;
-
-  _loadImage() {
-    if (Variable.artistIdToImagesMap.containsKey(widget.artist.id)) {
-      _images = Variable.artistIdToImagesMap[widget.artist.id];
-      _loaded = true;
-    } else {
-      _loadImagesAsync();
-    }
-  }
-
-  _loadImagesAsync() async {
-    await SchedulerBinding.instance.endOfFrame;
-    _images = List();
-    final albums =
-        await Variable.audioQuery.getAlbumsFromArtist(artist: widget.artist);
-    final allSongs = List<String>.from(Variable.artistIdToSongsMap[widget.artist.id]);
-    bool loadMore = true;
-
-    for (final album in albums) {
-      await SchedulerBinding.instance.endOfFrame;
-      final songs = Variable.albumIdToSongsMap[album.id];
-      if (songs == null) {
-        continue;
-      }
-      allSongs.removeWhere((item) => songs.contains(item));
-      final ImageProvider image = await Variable.getImageFromSongs(songs);
-      if (image != null) {
-        _images.add(image);
-        // only load four available images
-        if (_images.length >= 4) {
-          // cancel load more images mission
-          loadMore = false;
-          break;
-        }
-      }
-    }
-    if (loadMore) {
-      _images.addAll(await Variable.getImagesFromSongs(allSongs));
-    }
-
-    Variable.artistIdToImagesMap[widget.artist.id] = _images;
-    await SchedulerBinding.instance.endOfFrame;
-    setState(() => _loaded = true);
-  }
+  ArtistArtworkProvider artistArtworkProvider;
 
   static const _innerScrollDuration = Duration(milliseconds: 335);
 
-  _onTap() async {
+  _onTap(BuildContext context) async {
     if (Variable.innerScrollController != null) {
       RenderBox renderBox = context.findRenderObject();
       Offset position = renderBox.localToGlobal(Offset.zero);
@@ -96,22 +48,77 @@ class _ArtistViewItemState extends State<ArtistViewItem> {
             curve: Curves.fastOutSlowIn);
       }
     }
-    pushArtistViewPage(context, widget.artist);
+    ArtistViewPage.pushPage(context, artist);
   }
 
-  @override
-  void initState() {
-    // TODO: implement initState
-    super.initState();
-    _loadImage();
-    heroTag = widget.artist.hashCode.toString() + 'artist';
+  Widget _builder(BuildContext context, _images, Widget child) {
+    return (artistArtworkProvider.imageMap.length >= 2)
+        ? AnimatedSwitcher(
+            duration: Constants.defaultDuration,
+            layoutBuilder: Constants.expendLayoutBuilder,
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                Transform(
+                  transform: Matrix4.identity()..scale(0.5),
+                  alignment: Alignment.bottomLeft,
+                  child: _images.length >= 4
+                      ? Image(
+                          image: _images[3],
+                          fit: BoxFit.cover,
+                        )
+                      : Constants.emptyArtwork,
+                ),
+                Transform(
+                  transform: Matrix4.identity()..scale(0.5),
+                  alignment: Alignment.topRight,
+                  child: _images.length >= 3
+                      ? Image(
+                          image: _images[2],
+                          fit: BoxFit.cover,
+                        )
+                      : Constants.emptyArtwork,
+                ),
+                Transform(
+                  transform: Matrix4.identity()..scale(0.5),
+                  alignment: Alignment.bottomRight,
+                  child: _images.length >= 2
+                      ? Image(
+                          image: _images[1],
+                          fit: BoxFit.cover,
+                        )
+                      : Constants.emptyArtwork,
+                ),
+                Transform(
+                  transform: Matrix4.identity()..scale(0.5),
+                  alignment: Alignment.topLeft,
+                  child: _images.length >= 1
+                      ? Image(
+                          image: _images[0],
+                          fit: BoxFit.cover,
+                        )
+                      : Constants.emptyArtwork,
+                ),
+              ],
+            ),
+          )
+        : AnimatedSwitcher(
+            duration: Constants.defaultDuration,
+            layoutBuilder: Constants.expendLayoutBuilder,
+            child: _images.length == 0
+                ? Constants.emptyPersonPicture
+                : Image(
+                    image: _images[0],
+                    fit: BoxFit.cover,
+                  ),
+          );
   }
 
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
     return Hero(
-      tag: heroTag,
+      tag: artist.hashCode.toString() + 'artist',
       child: Card(
         clipBehavior: Clip.hardEdge,
         shape: const RoundedRectangleBorder(
@@ -125,74 +132,15 @@ class _ArtistViewItemState extends State<ArtistViewItem> {
               alignment: Alignment.topCenter,
               child: AspectRatio(
                 aspectRatio: 1,
-                child: (!_loaded)
-                    ? const AnimatedSwitcher(
-                        duration: Constants.defaultDuration,
-                        child: const SizedBox(),
-                      )
-                    : (_images.length >= 2)
-                        ? AnimatedSwitcher(
-                            duration: Constants.defaultDuration,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: <Widget>[
-                                Transform(
-                                  transform: Matrix4.identity()..scale(0.5),
-                                  alignment: Alignment.bottomLeft,
-                                  child: _images.length >= 4
-                                      ? Image(
-                                          image: _images[3],
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Constants.emptyArtwork,
-                                ),
-                                Transform(
-                                  transform: Matrix4.identity()..scale(0.5),
-                                  alignment: Alignment.topRight,
-                                  child: _images.length >= 3
-                                      ? Image(
-                                          image: _images[2],
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Constants.emptyArtwork,
-                                ),
-                                Transform(
-                                  transform: Matrix4.identity()..scale(0.5),
-                                  alignment: Alignment.bottomRight,
-                                  child: _images.length >= 2
-                                      ? Image(
-                                          image: _images[1],
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Constants.emptyArtwork,
-                                ),
-                                Transform(
-                                  transform: Matrix4.identity()..scale(0.5),
-                                  alignment: Alignment.topLeft,
-                                  child: _images.length >= 1
-                                      ? Image(
-                                          image: _images[0],
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Constants.emptyArtwork,
-                                ),
-                              ],
-                            ),
-                          )
-                        : AnimatedSwitcher(
-                            duration: Constants.defaultDuration,
-                            child: _images.length == 0
-                                ? Constants.emptyPersonPicture
-                                : Image(
-                                    image: _images[0],
-                                    fit: BoxFit.contain,
-                                  ),
-                          ),
+                child: ValueListenableBuilder(
+                  valueListenable: artistArtworkProvider,
+                  builder: _builder,
+                ),
               ),
             ),
             ForegroundView(
-              artist: widget.artist,
-              onTap: _onTap,
+              artist: artist,
+              onTap: () => _onTap(context),
             ),
           ],
         ),

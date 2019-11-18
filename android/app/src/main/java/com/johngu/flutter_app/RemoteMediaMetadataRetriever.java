@@ -1,10 +1,9 @@
 package com.johngu.flutter_app;
 
-import android.annotation.TargetApi;
-import android.os.Build;
 import android.util.Log;
 import android.util.Xml;
 
+import com.android.volley.DefaultRetryPolicy;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.RequestFuture;
@@ -14,6 +13,8 @@ import org.apache.commons.io.IOUtils;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.HashSet;
@@ -32,43 +33,60 @@ public final class RemoteMediaMetadataRetriever {
     private static final String getMBID = "getMBID";
     private static final String getMBIDError = "getMBID-Error";
 
-    public static class GetMBIDRunnable implements Runnable {
-        private final String artist;
-        private final String title;
 
-        GetMBIDRunnable(String artist, String title) {
-            this.artist = artist;
-            this.title = title;
-        }
+    private static final String maxQueryLimit = "10";
+    private static DefaultRetryPolicy defaultRetryPolicy = new DefaultRetryPolicy(
+            DefaultRetryPolicy.DEFAULT_TIMEOUT_MS * 2,
+            DefaultRetryPolicy.DEFAULT_MAX_RETRIES,
+            DefaultRetryPolicy.DEFAULT_BACKOFF_MULT);
+
+    public enum Category {
+        release, recording;
 
         @Override
-        public void run() {
-            getMBID(artist, title, null);
+        public String toString() {
+            switch (this) {
+                case release:
+                    return "release";
+                case recording:
+                    return "recording";
+            }
+            return super.toString();
         }
     }
 
-    private static final String maxQueryLimit = "7";
-
-    public static Set<String> getMBID(String artist, String title, String duration) {
-        assert (artist != null || title != null);
-        String request = "http://musicbrainz.org/ws/2/recording/?query=:";
-        if (artist == null) {
-            request += "recording:" + title;
-        } else if (title == null) {
-            request += "artist:" + artist;
+    private static String generateRequest(String artist, String album, String title) {
+        if (title == null) {
+            String request = "http://musicbrainz.org/ws/2/release/?query=";
+            request += "release:" + album.replaceAll("\\p{P}", "");
+            if (artist != null) {
+                request += " AND " + "artist:" + artist.replaceAll("\\p{P}", "");
+            }
+            return request;
         } else {
-            request += "recording:" + title + "+artist:" + artist;
+            String request = "http://musicbrainz.org/ws/2/recording/?query=";
+            request += "recording:" + title.replaceAll("\\p{P}", "");
+            if (album != null) {
+                request += " AND " + "release:" + album.replaceAll("\\p{P}", "");
+            }
+            if (artist != null) {
+                request += " AND " + "artist:" + artist.replaceAll("\\p{P}", "");
+            }
+            return request;
         }
+    }
 
-        // duration is a optional parameter
-        if (duration != null) {
-            request += "+dur:" + duration;
-        }
 
+    static Set<String> getMBID(String artist, String album, String title) {
+        assert (artist != null || album != null);
+        String request = generateRequest(artist, album, title);
         request += "&limit=" + maxQueryLimit;
+
+        Log.d("request", request);
 
         RequestFuture<String> future = RequestFuture.newFuture();
         StringRequest stringRequest = new StringRequest(Request.Method.GET, request, future, error -> Log.d(getMBIDError, error.getMessage()));
+        stringRequest.setRetryPolicy(defaultRetryPolicy);
         queue.add(stringRequest);
         Set<String> ids = new HashSet<String>();
         XmlPullParser parser = Xml.newPullParser();
@@ -124,21 +142,6 @@ public final class RemoteMediaMetadataRetriever {
         }
     }
 
-    public static class GetArtworkUrl implements Runnable {
-        private final String artist;
-        private final String title;
-
-        GetArtworkUrl(String artist, String title) {
-            this.artist = artist;
-            this.title = title;
-        }
-
-        @Override
-        public void run() {
-            Set<String> ids = getMBID(artist, title, null);
-            getArtwork(ids);
-        }
-    }
 
     private final static String getArtworkUrl = "getArtworkUrl";
     private final static String getArtworkUrlError = "getArtworkUrl-error";
@@ -176,5 +179,28 @@ public final class RemoteMediaMetadataRetriever {
             Log.d(getArtworkUrlError, e.getMessage());
         }
         return res;
+    }
+
+    public static String codeString(String fileName) throws Exception {
+        BufferedInputStream bin = new BufferedInputStream(
+                new FileInputStream(fileName));
+        int p = (bin.read() << 8) + bin.read();
+        String code = null;
+
+        switch (p) {
+            case 0xefbb:
+                code = "UTF-8";
+                break;
+            case 0xfffe:
+                code = "Unicode";
+                break;
+            case 0xfeff:
+                code = "UTF-16BE";
+                break;
+            default:
+                code = "GBK";
+        }
+
+        return code;
     }
 }

@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity/connectivity.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_app/component/AntiBlockingWidget.dart';
-import 'package:flutter_app/data/Database.dart' as Database;
+import 'package:flutter_app/data/CustomImageProvider.dart';
+import 'package:flutter_app/data/Database.dart' as db;
 import 'package:flutter_audio_query/flutter_audio_query.dart';
 import 'package:share_extend/share_extend.dart';
+import 'package:sqflite/sqlite_api.dart';
 
 import '../component/CustomValueNotifier.dart';
 import '../plugin/MediaMetadataRetriever.dart';
@@ -15,15 +19,17 @@ import 'Constants.dart';
 class Variable {
   static final audioQuery = FlutterAudioQuery();
 
-  static Database.LinkedList library;
-  static Database.LinkedList favourite;
+  static Database database;
+  static db.LinkedList library;
+  static db.LinkedList favourite;
 
-  static Database.Table cacheRemotePicture;
+  static db.ImageTable cacheRemotePicture;
   static const cacheRemotePicturePrimaryKey =
-      Database.DatabaseKey<String>(keyName: 'filePath');
+      db.DatabaseKey<String>(keyName: 'filePath');
   static const cacheRemotePictureKeys = [
-    Database.DatabaseKey<String>(keyName: 'img0')
+    db.DatabaseKey<String>(keyName: 'img0')
   ];
+  static final filePathToPendingRequestMap = Map<String, bool>();
 
   static final ValueNotifier<int> durationThreshold =
       ValueNotifier<int>(Constants.durationThreshold);
@@ -33,28 +39,34 @@ class Variable {
   static final CustomValueNotifier<String> currentItem =
       CustomValueNotifier(null);
 
+  static final Map<List, PlayListRegister> playListRegisters = Map();
+  static final CustomValueNotifier<List<RecentLog>> recentLogs =
+      CustomValueNotifier(List());
+
   static final CustomValueNotifier<List<String>> libraryNotify =
       CustomValueNotifier(null);
   static final CustomValueNotifier<List<String>> favouriteNotify =
       CustomValueNotifier(null);
 
-  static setCurrentSong(List<String> songList, String songInfo) async {
+  static setCurrentSong(List<String> songList, String filePath) async {
     // Alarm: songInfo must be come from filePathToSongMap
-    assert(filePathToSongMap.containsKey(songInfo));
+    assert(filePathToSongMap.containsKey(filePath));
     // Prevent update currentItem while pageRoute is in transition.
     // Warning: if update currentItem while pageRoute is in transition, it will cause Hero widget break down.
     beforeSetCurrentSong();
+    filePathToNotifierMap[currentItem.value].value = false;
     await pageRouteTransition();
     if (Variable.currentList.value != songList) {
       Variable.panelAntiBlock.value = true;
       await Future.delayed(AntiBlockDuration);
       Variable.currentList.value = songList;
-      Variable.currentItem.value = songInfo;
+      Variable.currentItem.value = filePath;
       Variable.panelAntiBlock.value = false;
       await Future.delayed(AntiBlockDuration);
     } else {
-      Variable.currentItem.value = songInfo;
+      Variable.currentItem.value = filePath;
     }
+    filePathToNotifierMap[filePath].value = true;
   }
 
   static Function() beforeSetCurrentSong = () {};
@@ -68,50 +80,86 @@ class Variable {
   static final Map<String, ValueNotifier<ImageProvider>> filePathToImageMap =
       Map<String, ValueNotifier<ImageProvider>>();
 
+  static final Map<String, ImageProvider> filePathToLocalImageMap =
+      Map<String, ImageProvider>();
+
+  /// The options which image should attach to show
+  static const String localImage = 'localImage';
+  static const String remoteImage = 'remoteImage';
+  static const String noneImage = 'remoteImage';
+
+  /// decide which image should attach to show
+  static final Map<String, String> filePathToAttachImageMap =
+      Map<String, String>();
+
   /// This function must be called before get image from [filePathToImageMap] sync
-  static Future<ImageProvider> getArtworkAsync({String path}) {
-    if (path == null) {
+  static Future<ImageProvider> getArtworkAsync({String filePath}) {
+    if (filePath == null) {
       return null;
     }
     // If image has no cache yet, instance a future to cache the image data
-    if (!futureImages.containsKey(path)) {
-      filePathToImageMap[path] ??= ValueNotifier<ImageProvider>(null);
-      futureImages[path] = Future<ImageProvider>(() async {
+    if (!futureImages.containsKey(filePath)) {
+      filePathToImageMap[filePath] ??= ValueNotifier<ImageProvider>(null);
+      futureImages[filePath] = Future<ImageProvider>(() async {
         ImageProvider image =
-            await MediaMetadataRetriever.getEmbeddedPicture(path);
+            await MediaMetadataRetriever.getEmbeddedPicture(filePath);
         if (image == null) {
-          final data = await cacheRemotePicture.getData(path);
+          final data = await cacheRemotePicture.getData(filePath);
           if (data != null) {
             image = MemoryImage(data[cacheRemotePictureKeys[0].keyName]);
             MediaMetadataRetriever.getPalette(
-                path, data[cacheRemotePictureKeys[0].keyName]);
+                filePath, (image as MemoryImage).bytes);
+          }
+        } else {
+          filePathToLocalImageMap[filePath] = image;
+        }
+        filePathToImageMap[filePath].value = image;
+
+        /// query image from internet
+        if (image == null) {
+          SongInfo songInfo = filePathToSongMap[filePath];
+          if (requestNetworkAccess()) {
+            MediaMetadataRetriever.getRemotePicture(songInfo: songInfo);
+          } else {
+            filePathToPendingRequestMap[filePath] = true;
           }
         }
-        filePathToImageMap[path].value = image;
-
-        if (image == null && shouldGetRemotePicture) {
-          /// query image from internet
-          SongInfo songInfo = filePathToSongMap[path];
-          MediaMetadataRetriever.getRemotePicture(songInfo.filePath,
-              songInfo.artist, songInfo.title, songInfo.duration);
-        }
-
         return image;
       });
     }
-    return Variable.futureImages[path];
+
+    /// If request was pended before and network state allow to capture artwork online,
+    /// restart download
+    if (filePathToPendingRequestMap.containsKey(filePath) &&
+        filePathToPendingRequestMap[filePath]) {
+      SongInfo songInfo = filePathToSongMap[filePath];
+      if (requestNetworkAccess()) {
+        MediaMetadataRetriever.getRemotePicture(songInfo: songInfo);
+        filePathToPendingRequestMap[filePath] = false;
+      }
+    }
+
+    return Variable.futureImages[filePath];
   }
 
-  static bool shouldGetRemotePicture = false;
+  static bool requestNetworkAccess() =>
+      (wifiSwitch.value == true &&
+          networkStatue.value == ConnectivityResult.wifi) ||
+      (mobileDataSwitch.value == true &&
+          networkStatue.value == ConnectivityResult.mobile);
 
   static Future mediaPlayerInitialization;
   static Future playListInitialization;
 
   static final filePathToSongMap = Map<String, SongInfo>();
-  static final albumIdToSongsMap = Map<String, List<String>>();
-  static final albumIdToImageMap = Map<String, ImageProvider>();
-  static final artistIdToSongsMap = Map<String, List<String>>();
-  static final artistIdToImagesMap = Map<String, List<ImageProvider>>();
+  static final filePathToNotifierMap = Map<String, CustomValueNotifier>();
+
+  static final albumIdToSongPathsMap =
+      Map<String, CustomValueNotifier<List<String>>>();
+  static final artistIdToSongPathsMap =
+      Map<String, CustomValueNotifier<List<String>>>();
+  static final artistIdToAlbumIdsMap =
+      Map<String, CustomValueNotifier<List<String>>>();
   static List<AlbumInfo> albums;
   static List<ArtistInfo> artists;
 
@@ -137,10 +185,19 @@ class Variable {
           await audioQuery.getSongsFromAlbum(album: albumInfo);
       List<String> songs = List();
       for (int i = 0; i < songInfos.length; i++) {
-        songs.add(songInfos[i].filePath);
+        if (filePathToSongMap.containsKey(songInfos[i].filePath))
+          songs.add(songInfos[i].filePath);
       }
       if (songInfos.length > 0) {
-        albumIdToSongsMap[albumInfo.id] = songs;
+        albumIdToSongPathsMap[albumInfo.id] = CustomValueNotifier(null);
+        albumIdToSongPathsMap[albumInfo.id].value = songs;
+        AlbumArtworkProvider(albumInfo.id);
+        playListRegisters[albumIdToSongPathsMap[albumInfo.id].value] =
+            PlayListRegister(albumInfo.title, (int oldIndex, int newIndex) {
+          reorder(
+              albumIdToSongPathsMap[albumInfo.id].value, oldIndex, newIndex);
+          albumIdToSongPathsMap[albumInfo.id].notifyListeners();
+        });
         i++;
       } else {
         // Clear the empty album
@@ -153,7 +210,11 @@ class Variable {
 
   static generalMapArtistToSong() async {
     await playListInitialization;
+    albumToSongsMapLoading ??= generalMapAlbumToSongs();
+    await albumToSongsMapLoading;
+
     artists = await audioQuery.getArtists();
+    print(artists);
     // Sort artists
     final List<ArtistInfo> _unknownArtists = List();
     for (int i = 0; i < Variable.artists.length;) {
@@ -169,6 +230,7 @@ class Variable {
         artists.add(artist);
       }
     }
+
     for (int i = 0; i < artists.length;) {
       await SchedulerBinding.instance.endOfFrame;
       final ArtistInfo artistInfo = artists[i];
@@ -176,10 +238,36 @@ class Variable {
           await audioQuery.getSongsFromArtist(artist: artistInfo);
       List<String> songs = List();
       for (int i = 0; i < songInfos.length; i++) {
-        songs.add(songInfos[i].filePath);
+        if (Variable.filePathToSongMap.containsKey(songInfos[i].filePath))
+          songs.add(songInfos[i].filePath);
       }
       if (songInfos.length > 0) {
-        Variable.artistIdToSongsMap[artistInfo.id] = songs;
+        Variable.artistIdToSongPathsMap[artistInfo.id] =
+            CustomValueNotifier(null);
+        Variable.artistIdToSongPathsMap[artistInfo.id].value = songs;
+
+        playListRegisters[
+                Variable.artistIdToSongPathsMap[artistInfo.id].value] =
+            PlayListRegister(artistInfo.name, (int oldIndex, int newIndex) {
+          reorder(Variable.artistIdToSongPathsMap[artistInfo.id].value,
+              oldIndex, newIndex);
+          Variable.artistIdToSongPathsMap[artistInfo.id].notifyListeners();
+        });
+
+        final albums = await audioQuery.getAlbumsFromArtist(artist: artistInfo);
+        List<String> albumIds = List();
+        albums.forEach((AlbumInfo albumInfo) {
+          if (Variable.albumIdToSongPathsMap.containsKey(albumInfo.id))
+            albumIds.add(albumInfo.id);
+        });
+
+        if (albumIds.isNotEmpty) {
+          Variable.artistIdToAlbumIdsMap[artistInfo.id] =
+              CustomValueNotifier(null);
+          Variable.artistIdToAlbumIdsMap[artistInfo.id].value = albumIds;
+          ArtistArtworkProvider(artistInfo.id);
+        }
+
         i++;
       } else {
         // Clear the empty artist
@@ -193,7 +281,7 @@ class Variable {
     for (final String songPath in songs) {
       await SchedulerBinding.instance.endOfFrame;
       final ImageProvider image =
-          await Variable.getArtworkAsync(path: songPath);
+          await Variable.getArtworkAsync(filePath: songPath);
       if (image != null) {
         return image;
       }
@@ -208,26 +296,12 @@ class Variable {
     for (final String songPath in songs) {
       await SchedulerBinding.instance.endOfFrame;
       final ImageProvider image =
-          await Variable.getArtworkAsync(path: songPath);
+          await Variable.getArtworkAsync(filePath: songPath);
       if (image != null) {
         list.add(image);
       }
     }
     return list;
-  }
-
-  static Future<ImageProvider> getImageFromAlbums(AlbumInfo album) async {
-    if (Variable.albumIdToImageMap.containsKey(album.id)) {
-      return Variable.albumIdToImageMap[album.id];
-    }
-    // must be use before albumToSongMap loaded
-    albumToSongsMapLoading ??= generalMapAlbumToSongs();
-    await albumToSongsMapLoading;
-    final songs = Variable.albumIdToSongsMap[album.id];
-    // get single image
-    final ImageProvider image = await getImageFromSongs(songs);
-    Variable.albumIdToImageMap[album.id] = image;
-    return image;
   }
 
   static final CustomValueNotifier<bool> panelAntiBlock =
@@ -248,7 +322,32 @@ class Variable {
       debugPrint("File doesn't exist");
     }
   }
+
+  static const highQuality = 0;
+  static const middleQuality = 1;
+  static const lowQuality = 2;
+  static final ValueNotifier<int> remoteImageQuality =
+      ValueNotifier<int>(highQuality);
+
+  static final ValueNotifier wifiSwitch = ValueNotifier<bool>(true);
+  static final ValueNotifier mobileDataSwitch = ValueNotifier<bool>(false);
+  static final ValueNotifier networkStatue =
+      ValueNotifier<ConnectivityResult>(ConnectivityResult.none);
+
+  static final ValueNotifier notificationPlayBackSwitch =
+      ValueNotifier<bool>(true);
+  static final ValueNotifier notificationProductNewsSwitch =
+      ValueNotifier<bool>(false);
+
+  static const autoTheme = 'Auto';
+  static const lightTheme = 'Light';
+  static const darkTheme = 'Dark';
+  static final ValueNotifier<String> themeSwitch = ValueNotifier(autoTheme);
 }
+
+reorder(List list, int oldIndex, int newIndex) async => (oldIndex < newIndex)
+    ? list.insert(newIndex - 1, list.removeAt(oldIndex))
+    : list.insert(newIndex, list.removeAt(oldIndex));
 
 bool _updating = false;
 
@@ -350,5 +449,48 @@ class PlayListSequence {
       return Icons.shuffle;
     }
     return Icons.error;
+  }
+}
+
+class PlayListRegister {
+  const PlayListRegister(this.title, this.onReorder,
+      {this.subTitle, this.icon});
+
+  final String title;
+  final String subTitle;
+  final Function(int, int) onReorder;
+  final Icon icon;
+}
+
+class RecentLog {
+  static final Map<String, List> _cacheX = Map();
+  static final Map<List, RecentLog> _cacheY = Map();
+
+  factory RecentLog({String filePath, List playList}) {
+    if (_cacheX.containsKey(filePath) && _cacheY.containsKey(playList)) {
+      return _cacheY[playList];
+    } else {
+      _cacheX[filePath] = playList;
+      _cacheY[playList] =
+          RecentLog.init(filePath: filePath, playList: playList);
+      return _cacheY[playList];
+    }
+  }
+
+  RecentLog.init({this.filePath, this.playList});
+
+  final String filePath;
+  final List playList;
+
+  @override
+  String toString() {
+    final PlayListRegister playListRegister =
+        Variable.playListRegisters[playList];
+    return '\n{' +
+        'filePath: ' +
+        this.filePath +
+        ' playList: ' +
+        playListRegister.title +
+        '}';
   }
 }
