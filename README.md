@@ -1,6 +1,7 @@
 # flutter_app
 
-A new Flutter application.
+A Flutter Music application.
+An attempt for UI/UX
 
 ## Getting Started
 
